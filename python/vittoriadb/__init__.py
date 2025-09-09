@@ -29,7 +29,13 @@ from .types import (
     SearchResult,
     CollectionInfo,
     DistanceMetric,
-    IndexType
+    IndexType,
+    VittoriaDBError,
+    ConnectionError,
+    CollectionError,
+    VectorError,
+    SearchError,
+    BinaryError
 )
 
 __version__ = "0.1.0"
@@ -45,4 +51,10 @@ __all__ = [
     "CollectionInfo",
     "DistanceMetric",
     "IndexType",
+    "VittoriaDBError",
+    "ConnectionError",
+    "CollectionError",
+    "VectorError",
+    "SearchError",
+    "BinaryError",
 ]

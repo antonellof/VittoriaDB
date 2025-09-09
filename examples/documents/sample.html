@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="VittoriaDB - Simple embedded vector database for AI applications">
+    <meta name="keywords" content="vector database, AI, embeddings, similarity search">
+    <meta name="author" content="VittoriaDB Team">
+    <title>VittoriaDB - Local Vector Database</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+        .header { background: #f4f4f4; padding: 20px; border-radius: 5px; }
+        .feature { margin: 20px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #007cba; }
+        code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
+        .highlight { background-color: yellow; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 VittoriaDB</h1>
+        <p><strong>Simple Embedded Vector Database for AI Development</strong></p>
+    </div>
+
+    <h2>What is VittoriaDB?</h2>
+    <p>VittoriaDB is a high-performance, embedded vector database designed specifically for local AI development and production deployments. It provides a <span class="highlight">zero-configuration solution</span> for vector similarity search, making it perfect for RAG applications, semantic search, and recommendation systems.</p>
+
+    <h2>Key Features</h2>
+    
+    <div class="feature">
+        <h3>🎯 Zero Configuration</h3>
+        <p>Works immediately after installation. No complex setup, no Docker required, no cloud dependencies.</p>
+    </div>
+
+    <div class="feature">
+        <h3>⚡ High Performance</h3>
+        <p>HNSW indexing provides sub-millisecond search times for millions of vectors. SIMD optimizations for distance calculations.</p>
+    </div>
+
+    <div class="feature">
+        <h3>📁 Persistent Storage</h3>
+        <p>ACID-compliant file-based storage with Write-Ahead Log (WAL) for durability and crash recovery.</p>
+    </div>
+
+    <div class="feature">
+        <h3>🔌 Dual Interface</h3>
+        <p>REST API for universal access and native Python client with auto-binary management.</p>
+    </div>
+
+    <h2>Quick Start</h2>
+    <p>Get started with VittoriaDB in just a few commands:</p>
+    
+    <pre><code># 1. Download and run
+./vittoriadb run
+
+# 2. Create collection
+curl -X POST http://localhost:8080/collections \
+  -H "Content-Type: application/json" \
+  -d '{"name": "documents", "dimensions": 384}'
+
+# 3. Insert vector
+curl -X POST http://localhost:8080/collections/documents/vectors \
+  -H "Content-Type: application/json" \
+  -d '{"id": "doc1", "vector": [0.1, 0.2, 0.3, ...], "metadata": {"title": "Sample Document"}}'
+
+# 4. Search
+curl "http://localhost:8080/collections/documents/search?vector=0.1,0.2,0.3,...&limit=5"</code></pre>
+
+    <h2>Document Processing</h2>
+    <p>VittoriaDB can process various document formats and automatically chunk them for vector storage:</p>
+    
+    <ul>
+        <li><strong>Plain Text</strong> (.txt) - Direct text processing</li>
+        <li><strong>Markdown</strong> (.md) - With frontmatter support</li>
+        <li><strong>HTML</strong> (.html) - Tag stripping and metadata extraction</li>
+        <li><strong>PDF</strong> (.pdf) - Text extraction (requires library integration)</li>
+        <li><strong>Word</strong> (.docx) - Document processing (requires library integration)</li>
+    </ul>
+
+    <h2>Use Cases</h2>
+    <p>VittoriaDB is perfect for:</p>
+    <ul>
+        <li><strong>RAG Applications</strong> - Retrieval-Augmented Generation systems</li>
+        <li><strong>Semantic Search</strong> - Find similar documents based on meaning</li>
+        <li><strong>Recommendation Systems</strong> - Content and product recommendations</li>
+        <li><strong>AI Prototyping</strong> - Rapid development and testing</li>
+        <li><strong>Edge Deployment</strong> - Local processing without cloud dependencies</li>
+    </ul>
+
+    <h2>Performance</h2>
+    <table border="1" style="border-collapse: collapse; width: 100%;">
+        <tr>
+            <th>Metric</th>
+            <th>Performance</th>
+        </tr>
+        <tr>
+            <td>Insert Speed</td>
+            <td>&gt;10k vectors/second</td>
+        </tr>
+        <tr>
+            <td>Search Speed</td>
+            <td>&lt;1ms for 1M vectors</td>
+        </tr>
+        <tr>
+            <td>Memory Usage</td>
+            <td>&lt;100MB for 100k vectors</td>
+        </tr>
+        <tr>
+            <td>Binary Size</td>
+            <td>~8MB compressed</td>
+        </tr>
+    </table>
+
+    <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc;">
+        <p><em>Built with ❤️ for the AI community</em></p>
+        <p>Visit us on <a href="https://github.com/antonellof/VittoriaDB">GitHub</a> for more information.</p>
+    </footer>
+
+    <!-- JavaScript for interactivity -->
+    <script>
+        console.log('VittoriaDB documentation loaded');
+        
+        // Highlight code blocks on hover
+        document.querySelectorAll('code').forEach(function(code) {
+            code.addEventListener('mouseenter', function() {
+                this.style.backgroundColor = '#e6f3ff';
+            });
+            code.addEventListener('mouseleave', function() {
+                this.style.backgroundColor = '#f4f4f4';
+            });
+        });
+    </script>
+</body>
+</html>

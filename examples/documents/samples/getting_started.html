@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Getting started with VittoriaDB vector database">
+    <meta name="keywords" content="vector database, AI, getting started, tutorial">
+    <title>Getting Started with VittoriaDB</title>
+</head>
+<body>
+    <h1>Getting Started with VittoriaDB</h1>
+    
+    <h2>Quick Installation</h2>
+    <p>VittoriaDB can be installed in multiple ways:</p>
+    
+    <h3>Option 1: Pre-built Binaries</h3>
+    <p>Download from GitHub releases and run immediately:</p>
+    <pre><code>wget https://github.com/antonellof/VittoriaDB/releases/download/v0.1.0/vittoriadb-v0.1.0-linux-amd64.tar.gz
+tar -xzf vittoriadb-v0.1.0-linux-amd64.tar.gz
+./vittoriadb run</code></pre>
+    
+    <h3>Option 2: From Source</h3>
+    <p>Build from source with Go:</p>
+    <pre><code>go install github.com/antonellof/VittoriaDB/cmd/vittoriadb@latest
+vittoriadb run</code></pre>
+    
+    <h2>First Steps</h2>
+    <ol>
+        <li><strong>Start the server:</strong> Run <code>vittoriadb run</code></li>
+        <li><strong>Create a collection:</strong> Use the REST API to create your first collection</li>
+        <li><strong>Insert vectors:</strong> Add your vector data</li>
+        <li><strong>Search:</strong> Perform similarity searches</li>
+    </ol>
+    
+    <h2>API Examples</h2>
+    <p>Here are some basic API calls to get you started:</p>
+    
+    <h3>Create Collection</h3>
+    <pre><code>curl -X POST http://localhost:8080/collections \
+  -H "Content-Type: application/json" \
+  -d '{"name": "documents", "dimensions": 384}'</code></pre>
+    
+    <h3>Insert Vector</h3>
+    <pre><code>curl -X POST http://localhost:8080/collections/documents/vectors \
+  -H "Content-Type: application/json" \
+  -d '{"id": "doc1", "vector": [0.1, 0.2, 0.3, ...], "metadata": {"title": "Test Document"}}'</code></pre>
+    
+    <h3>Search</h3>
+    <pre><code>curl "http://localhost:8080/collections/documents/search?vector=0.1,0.2,0.3,...&limit=5"</code></pre>
+    
+    <h2>Next Steps</h2>
+    <p>Once you have the basics working, explore:</p>
+    <ul>
+        <li>Document processing capabilities</li>
+        <li>Python client integration</li>
+        <li>Advanced indexing options</li>
+        <li>Performance tuning</li>
+    </ul>
+</body>
+</html>

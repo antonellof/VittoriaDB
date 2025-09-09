@@ -12,9 +12,9 @@ Run:
     python examples/rag_example.py
 """
 
-import vittoriadb
 import time
 from typing import List, Dict, Any
+import vittoriadb
 
 # Optional: Use sentence-transformers for real embeddings
 try:
@@ -48,7 +48,7 @@ class SimpleRAG:
     def connect(self):
         """Connect to VittoriaDB and create collection."""
         print("Connecting to VittoriaDB...")
-        self.db = vittoriadb.connect()
+        self.db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
         
         # Create or get collection
         try:

@@ -184,16 +184,26 @@ class VittoriaDB:
                          index_type: Union[IndexType, str] = IndexType.FLAT,
                          config: Optional[Dict[str, Any]] = None) -> 'Collection':
         """Create a new vector collection."""
+        # Convert to enum values and then to integers (Go server expects integers)
         if isinstance(metric, DistanceMetric):
-            metric = metric.value
+            metric_int = metric.value
+        elif isinstance(metric, str):
+            metric_int = DistanceMetric.from_string(metric).value
+        else:
+            metric_int = DistanceMetric.COSINE.value
+            
         if isinstance(index_type, IndexType):
-            index_type = index_type.value
+            index_int = index_type.value
+        elif isinstance(index_type, str):
+            index_int = IndexType.from_string(index_type).value
+        else:
+            index_int = IndexType.FLAT.value
         
         payload = {
             "name": name,
             "dimensions": dimensions,
-            "metric": metric,
-            "index_type": index_type,
+            "metric": metric_int,
+            "index_type": index_int,
             "config": config or {}
         }
         

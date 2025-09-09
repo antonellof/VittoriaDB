@@ -11,15 +11,17 @@ import (
 	"time"
 
 	"github.com/antonellof/VittoriaDB/pkg/core"
+	"github.com/antonellof/VittoriaDB/pkg/processor"
 	"github.com/gorilla/mux"
 )
 
 // Server represents the HTTP API server
 type Server struct {
-	db     core.Database
-	router *mux.Router
-	server *http.Server
-	config *ServerConfig
+	db        core.Database
+	router    *mux.Router
+	server    *http.Server
+	config    *ServerConfig
+	processor *processor.ProcessorFactory
 }
 
 // ServerConfig represents server configuration
@@ -35,9 +37,10 @@ type ServerConfig struct {
 // NewServer creates a new HTTP server
 func NewServer(db core.Database, config *ServerConfig) *Server {
 	s := &Server{
-		db:     db,
-		router: mux.NewRouter(),
-		config: config,
+		db:        db,
+		router:    mux.NewRouter(),
+		config:    config,
+		processor: processor.NewProcessorFactory(),
 	}
 
 	s.setupRoutes()
@@ -81,6 +84,11 @@ func (s *Server) setupRoutes() {
 	s.router.HandleFunc("/collections/{name}/vectors/batch", s.handleVectorsBatch).Methods("POST")
 	s.router.HandleFunc("/collections/{name}/vectors/{id}", s.handleVector).Methods("GET", "DELETE")
 	s.router.HandleFunc("/collections/{name}/search", s.handleSearch).Methods("GET", "POST")
+
+	// Document processing
+	s.router.HandleFunc("/collections/{name}/documents", s.handleDocumentUpload).Methods("POST")
+	s.router.HandleFunc("/documents/process", s.handleDocumentProcess).Methods("POST")
+	s.router.HandleFunc("/documents/supported", s.handleSupportedFormats).Methods("GET")
 
 	// Web dashboard (simple HTML page)
 	s.router.HandleFunc("/", s.handleDashboard).Methods("GET")
@@ -631,4 +639,171 @@ func (s *Server) writeError(w http.ResponseWriter, status int, message string, e
 
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(errorResponse)
+}
+
+// Document processing handlers
+
+// handleDocumentUpload handles document upload and processing for a collection
+func (s *Server) handleDocumentUpload(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	collectionName := vars["name"]
+
+	// Parse multipart form
+	err := r.ParseMultipartForm(32 << 20) // 32MB max
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "Failed to parse multipart form", err)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "No file provided", err)
+		return
+	}
+	defer file.Close()
+
+	// Get processing configuration from form
+	config := processor.DefaultProcessingConfig()
+	if chunkSize := r.FormValue("chunk_size"); chunkSize != "" {
+		if size, err := strconv.Atoi(chunkSize); err == nil {
+			config.ChunkSize = size
+		}
+	}
+	if overlap := r.FormValue("chunk_overlap"); overlap != "" {
+		if size, err := strconv.Atoi(overlap); err == nil {
+			config.ChunkOverlap = size
+		}
+	}
+	if lang := r.FormValue("language"); lang != "" {
+		config.Language = lang
+	}
+
+	// Add metadata from form
+	if metadata := r.FormValue("metadata"); metadata != "" {
+		var meta map[string]string
+		if err := json.Unmarshal([]byte(metadata), &meta); err == nil {
+			config.Metadata = meta
+		}
+	}
+
+	// Process document
+	proc, err := s.processor.GetProcessorByFilename(header.Filename)
+	if err != nil {
+		s.writeError(w, http.StatusUnsupportedMediaType, "Unsupported document type", err)
+		return
+	}
+
+	doc, err := proc.ProcessDocument(file, header.Filename, config)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "Failed to process document", err)
+		return
+	}
+
+	// Get collection
+	collection, err := s.db.GetCollection(r.Context(), collectionName)
+	if err != nil {
+		s.writeError(w, http.StatusNotFound, "Collection not found", err)
+		return
+	}
+
+	// Insert document chunks as vectors (placeholder - would need embedding generation)
+	var insertedChunks []string
+	for _, chunk := range doc.Chunks {
+		// TODO: Generate embeddings for chunk.Content
+		// For now, create placeholder vector
+		vector := &core.Vector{
+			ID:     chunk.ID,
+			Vector: make([]float32, 384), // Placeholder vector
+			Metadata: map[string]interface{}{
+				"document_id":    doc.ID,
+				"document_title": doc.Title,
+				"chunk_content":  chunk.Content,
+				"chunk_position": chunk.Position,
+				"chunk_size":     chunk.Size,
+			},
+		}
+
+		// Add chunk metadata
+		for k, v := range chunk.Metadata {
+			vector.Metadata["chunk_"+k] = v
+		}
+
+		if err := collection.Insert(r.Context(), vector); err != nil {
+			log.Printf("Failed to insert chunk %s: %v", chunk.ID, err)
+			continue
+		}
+
+		insertedChunks = append(insertedChunks, chunk.ID)
+	}
+
+	response := map[string]interface{}{
+		"status":          "processed",
+		"document_id":     doc.ID,
+		"document_title":  doc.Title,
+		"document_type":   doc.Type,
+		"chunks_created":  len(doc.Chunks),
+		"chunks_inserted": len(insertedChunks),
+		"processing_time": time.Since(doc.ProcessedAt).Milliseconds(),
+		"collection":      collectionName,
+	}
+
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+// handleDocumentProcess processes a document without adding to collection
+func (s *Server) handleDocumentProcess(w http.ResponseWriter, r *http.Request) {
+	// Parse multipart form
+	err := r.ParseMultipartForm(32 << 20) // 32MB max
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "Failed to parse multipart form", err)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "No file provided", err)
+		return
+	}
+	defer file.Close()
+
+	// Get processing configuration
+	config := processor.DefaultProcessingConfig()
+	if chunkSize := r.FormValue("chunk_size"); chunkSize != "" {
+		if size, err := strconv.Atoi(chunkSize); err == nil {
+			config.ChunkSize = size
+		}
+	}
+	if overlap := r.FormValue("chunk_overlap"); overlap != "" {
+		if size, err := strconv.Atoi(overlap); err == nil {
+			config.ChunkOverlap = size
+		}
+	}
+
+	// Process document
+	proc, err := s.processor.GetProcessorByFilename(header.Filename)
+	if err != nil {
+		s.writeError(w, http.StatusUnsupportedMediaType, "Unsupported document type", err)
+		return
+	}
+
+	doc, err := proc.ProcessDocument(file, header.Filename, config)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "Failed to process document", err)
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, doc)
+}
+
+// handleSupportedFormats returns supported document formats
+func (s *Server) handleSupportedFormats(w http.ResponseWriter, r *http.Request) {
+	info := s.processor.GetProcessorInfo()
+
+	response := map[string]interface{}{
+		"supported_formats": info,
+		"extensions":        s.processor.GetSupportedExtensions(),
+		"total_processors":  len(info),
+	}
+
+	s.writeJSON(w, http.StatusOK, response)
 }

@@ -1,0 +1,22 @@
+VittoriaDB: A Simple Vector Database
+
+VittoriaDB is a high-performance, embedded vector database designed specifically for local AI development and production deployments. Built with simplicity and performance in mind, it provides a zero-configuration solution for vector similarity search.
+
+Key Features:
+- Zero Configuration: Works immediately after installation
+- High Performance: HNSW indexing for scalable similarity search
+- Persistent Storage: ACID-compliant file-based storage with WAL
+- Dual Interface: REST API + Native Python client
+- Document Processing: Support for PDF, DOCX, TXT, MD, HTML files
+- AI-Ready: Seamless integration with embedding models
+
+Use Cases:
+VittoriaDB is perfect for RAG applications, semantic search, recommendation systems, and AI prototyping. It bridges the gap between complex cloud-based vector databases and simple in-memory solutions.
+
+Getting Started:
+1. Download the binary from GitHub releases
+2. Run: ./vittoriadb run
+3. Create a collection via REST API
+4. Insert vectors and start searching
+
+The database stores all data locally in configurable directories, making it perfect for development, testing, and edge deployments where you need full control over your data.

@@ -9,17 +9,57 @@ from enum import Enum
 
 class DistanceMetric(Enum):
     """Distance metrics for vector similarity calculation."""
-    COSINE = "cosine"
-    EUCLIDEAN = "euclidean"
-    DOT_PRODUCT = "dot_product"
-    MANHATTAN = "manhattan"
+    COSINE = 0
+    EUCLIDEAN = 1
+    DOT_PRODUCT = 2
+    MANHATTAN = 3
+    
+    @classmethod
+    def from_string(cls, value: str) -> 'DistanceMetric':
+        """Create DistanceMetric from string value."""
+        string_map = {
+            "cosine": cls.COSINE,
+            "euclidean": cls.EUCLIDEAN,
+            "dot_product": cls.DOT_PRODUCT,
+            "manhattan": cls.MANHATTAN
+        }
+        return string_map.get(value.lower(), cls.COSINE)
+    
+    def to_string(self) -> str:
+        """Convert to string representation."""
+        string_map = {
+            self.COSINE: "cosine",
+            self.EUCLIDEAN: "euclidean", 
+            self.DOT_PRODUCT: "dot_product",
+            self.MANHATTAN: "manhattan"
+        }
+        return string_map.get(self, "cosine")
 
 
 class IndexType(Enum):
     """Vector index types."""
-    FLAT = "flat"
-    HNSW = "hnsw"
-    IVF = "ivf"
+    FLAT = 0
+    HNSW = 1
+    IVF = 2
+    
+    @classmethod
+    def from_string(cls, value: str) -> 'IndexType':
+        """Create IndexType from string value."""
+        string_map = {
+            "flat": cls.FLAT,
+            "hnsw": cls.HNSW,
+            "ivf": cls.IVF
+        }
+        return string_map.get(value.lower(), cls.FLAT)
+    
+    def to_string(self) -> str:
+        """Convert to string representation."""
+        string_map = {
+            self.FLAT: "flat",
+            self.HNSW: "hnsw",
+            self.IVF: "ivf"
+        }
+        return string_map.get(self, "flat")
 
 
 @dataclass

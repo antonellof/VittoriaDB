@@ -11,6 +11,9 @@ import (
 	"github.com/antonellof/VittoriaDB/pkg/index"
 )
 
+// Simple demonstration of VittoriaDB indexing capabilities
+// This example shows how to use the core indexing functionality directly
+
 func main() {
 	fmt.Println("🧪 VittoriaDB Simple Index Test")
 	fmt.Println("=================================")

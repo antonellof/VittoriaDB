@@ -14,18 +14,18 @@ Run this after installing VittoriaDB:
     python examples/basic_usage.py
 """
 
-import vittoriadb
 import numpy as np
 import time
+import vittoriadb
 
 
 def main():
     print("🚀 VittoriaDB Basic Usage Example")
     print("=" * 40)
     
-    # Connect to VittoriaDB (auto-starts server)
+    # Connect to VittoriaDB (connect to existing server)
     print("1. Connecting to VittoriaDB...")
-    db = vittoriadb.connect()
+    db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
     
     # Check health
     health = db.health()
@@ -34,14 +34,22 @@ def main():
     
     # Create a collection
     print("\n2. Creating collection 'documents'...")
-    collection = db.create_collection(
-        name="documents",
-        dimensions=384,  # Common embedding dimension
-        metric="cosine"
-    )
-    print(f"   Collection created: {collection.name}")
+    try:
+        collection = db.create_collection(
+            name="documents",
+            dimensions=384,  # Common embedding dimension
+            metric="cosine"
+        )
+        print(f"   Collection created: {collection.name}")
+    except vittoriadb.CollectionError as e:
+        if "already exists" in str(e):
+            print("   Collection already exists, using existing one...")
+            collection = db.get_collection("documents")
+        else:
+            raise
+    
     print(f"   Dimensions: {collection.info.dimensions}")
-    print(f"   Metric: {collection.info.metric.value}")
+    print(f"   Metric: {collection.info.metric.to_string()}")
     
     # Insert some sample vectors
     print("\n3. Inserting sample vectors...")

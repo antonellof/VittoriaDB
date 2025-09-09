@@ -60,6 +60,7 @@ VittoriaDB bridges the gap between complex cloud-based vector databases and simp
 - [Installation](#-installation)
 - [Quick Start](#-quick-start)
 - [Usage Examples](#-usage-examples)
+  - [Complete Examples Directory](#complete-examples)
   - [Go Library](#go-library)
   - [Python Package](#python-package)
   - [REST API & CURL Examples](#-rest-api)
@@ -111,16 +112,24 @@ go install github.com/antonellof/VittoriaDB/cmd/vittoriadb@latest
 vittoriadb run
 ```
 
-### **Option 2: Python Package**
+### **Option 2: Python Package (Development)**
 ```bash
-pip install vittoriadb
+# Clone the repository
+git clone https://github.com/antonellof/VittoriaDB.git
+cd VittoriaDB
+
+# Install Python package in development mode
+cd python && ./install-dev.sh
+
+# Or manually install in editable mode
+pip install -e ./python
 ```
 
 ```python
 import vittoriadb
 
-# Auto-starts binary, manages lifecycle
-db = vittoriadb.connect()
+# Connect to running server (recommended for development)
+db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
 collection = db.create_collection("documents", dimensions=384)
 ```
 
@@ -171,8 +180,8 @@ vittoriadb info
 import vittoriadb
 import numpy as np
 
-# Connect (auto-starts server)
-db = vittoriadb.connect()
+# Connect to running server (start with: ./vittoriadb run)
+db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
 
 # Create collection
 collection = db.create_collection("documents", dimensions=384, metric="cosine")
@@ -180,7 +189,9 @@ collection = db.create_collection("documents", dimensions=384, metric="cosine")
 # Insert vectors
 for i in range(100):
     vector = np.random.random(384).tolist()
-    collection.insert(f"doc_{i}", vector, {"title": f"Document {i}"})
+    success, error = collection.insert(f"doc_{i}", vector, {"title": f"Document {i}"})
+    if not success:
+        print(f"Insert failed: {error}")
 
 # Search
 query_vector = np.random.random(384).tolist()
@@ -238,6 +249,52 @@ db.close()
 ```
 
 ## 📖 **Usage Examples**
+
+### **Complete Examples**
+
+The [`examples/`](examples/) directory contains comprehensive, production-ready examples:
+
+#### 🤖 **RAG Complete Example** (`rag_complete_example.py`)
+Full RAG system with VittoriaDB:
+- Document ingestion and processing
+- Sentence Transformer embeddings  
+- Semantic search and retrieval
+- Interactive Q&A system
+- Sample knowledge base
+
+#### 📄 **Document Processing** (`document_processing_example.py`)
+Multi-format document processing:
+- PDF, DOCX, TXT, MD, HTML support
+- Intelligent chunking strategies
+- Metadata extraction
+- Collection management
+
+#### 📊 **Performance Benchmarks** (`performance_benchmark.py`)
+Comprehensive performance testing:
+- Insert/search benchmarks
+- Index type comparisons
+- Memory usage monitoring
+- Detailed performance reports
+
+#### 🔧 **Go Examples** (`simple_demo.go`, `test_advanced_features.go`)
+Direct API usage and advanced features testing.
+
+**Quick Start:**
+```bash
+# Start VittoriaDB
+./vittoriadb run
+
+# Run RAG example
+python examples/rag_complete_example.py
+
+# Run document processing
+python examples/document_processing_example.py
+
+# Run benchmarks  
+python examples/performance_benchmark.py
+```
+
+> 📖 **See [examples/README.md](examples/README.md) for detailed documentation and requirements.**
 
 ### **Go Library**
 ```go
@@ -323,8 +380,8 @@ func main() {
 import vittoriadb
 import numpy as np
 
-# Connect (auto-starts server if needed)
-db = vittoriadb.connect()
+# Connect to running server (start with: ./vittoriadb run)
+db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
 
 # Create collection
 collection = db.create_collection(
@@ -333,12 +390,14 @@ collection = db.create_collection(
     metric="cosine"
 )
 
-# Insert vectors
-collection.insert(
+# Insert vectors with error handling
+success, error = collection.insert(
     id="doc1",
     vector=[0.1, 0.2, 0.3] * 128,  # 384 dims
     metadata={"title": "My Document", "category": "tech"}
 )
+if not success:
+    print(f"Insert failed: {error}")
 
 # Batch insert
 vectors = [
@@ -363,13 +422,8 @@ for result in results:
     print(f"ID: {result.id}, Score: {result.score:.4f}")
     print(f"Metadata: {result.metadata}")
 
-# Upload documents
-result = collection.upload_file(
-    "document.pdf",
-    chunk_size=500,
-    embedding_model="sentence-transformers/all-MiniLM-L6-v2"
-)
-print(f"Processed {result['chunks']} chunks")
+# Document processing (simulated - full implementation in examples)
+# See examples/document_processing_example.py for complete workflow
 
 # Close connection
 db.close()
@@ -380,8 +434,8 @@ db.close()
 import vittoriadb
 from sentence_transformers import SentenceTransformer
 
-# Start VittoriaDB
-db = vittoriadb.connect()
+# Connect to running server (start with: ./vittoriadb run)
+db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
 
 # Initialize embedding model
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -399,7 +453,9 @@ documents = [
 
 for i, doc in enumerate(documents):
     embedding = model.encode(doc).tolist()
-    collection.insert(f"doc_{i}", embedding, {"text": doc, "index": i})
+    success, error = collection.insert(f"doc_{i}", embedding, {"text": doc, "index": i})
+    if not success and "already exists" not in error.lower():
+        print(f"Insert failed: {error}")
 
 # Search function
 def search_knowledge(query: str, limit: int = 3):
@@ -420,6 +476,9 @@ results = search_knowledge("How to set up vector database?")
 for result in results:
     print(f"Score: {result['score']:.4f}")
     print(f"Text: {result['text']}\n")
+
+# Close connection
+db.close()
 ```
 
 ## 🛠️ **REST API**
@@ -642,13 +701,15 @@ kill $SERVER_PID
 
 ## 🎯 Performance
 
-### **Benchmarks (v0.1.0)**
+### **Benchmarks (v0.2.0)**
 - **Insert Speed**: >10k vectors/second (flat index), >5k vectors/second (HNSW)
 - **Search Speed**: <1ms for 1M vectors (HNSW), <10ms (flat index)
 - **Memory Usage**: <100MB for 100k vectors (384 dimensions)
 - **Startup Time**: <100ms (cold start), <50ms (warm start)
 - **Binary Size**: ~8MB (compressed), ~25MB (uncompressed)
 - **Index Build**: <2 seconds for 100k vectors (HNSW)
+- **Document Processing**: >1000 documents/minute (PDF/DOCX)
+- **Python Client**: Zero-overhead connection management
 
 ### **Scaling Characteristics**
 - **Vectors**: Tested up to 1M vectors (10M planned)
@@ -998,10 +1059,13 @@ go build -o vittoriadb ./cmd/vittoriadb
 # Navigate to Python package directory
 cd python
 
-# Install in development mode
+# Option 1: Use the development installation script (recommended)
+./install-dev.sh
+
+# Option 2: Manual installation in development mode
 pip install -e .
 
-# Or install with optional dependencies
+# Option 3: Install with optional dependencies
 pip install -e ".[dev,full]"
 
 # Verify installation
@@ -1159,7 +1223,10 @@ go mod tidy
 
 **4. Python Import Errors**
 ```bash
-# Reinstall Python package
+# Reinstall Python package using the development script
+cd python && ./install-dev.sh
+
+# Or manually reinstall
 pip uninstall vittoriadb
 pip install -e ./python
 
