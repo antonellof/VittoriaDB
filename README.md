@@ -70,15 +70,37 @@ VittoriaDB bridges the gap between complex cloud-based vector databases and simp
 
 ## 📦 **Installation**
 
-### **Option 1: Go Binary (Recommended)**
+### **Option 1: Pre-built Binaries (Recommended)**
+
+**Quick Install Script:**
 ```bash
-# Install from source
+# Install latest version
+curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/install.sh | bash
+
+# Or install specific version
+curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/install.sh | bash -s -- --version v0.1.0
+```
+
+**Manual Download:**
+Download from [GitHub Releases](https://github.com/antonellof/VittoriaDB/releases/latest):
+
+- **Linux AMD64**: `vittoriadb-v0.1.0-linux-amd64.tar.gz`
+- **Linux ARM64**: `vittoriadb-v0.1.0-linux-arm64.tar.gz`  
+- **macOS Intel**: `vittoriadb-v0.1.0-darwin-amd64.tar.gz`
+- **macOS Apple Silicon**: `vittoriadb-v0.1.0-darwin-arm64.tar.gz`
+- **Windows**: `vittoriadb-v0.1.0-windows-amd64.zip`
+
+```bash
+# Example for Linux
+wget https://github.com/antonellof/VittoriaDB/releases/download/v0.1.0/vittoriadb-v0.1.0-linux-amd64.tar.gz
+tar -xzf vittoriadb-v0.1.0-linux-amd64.tar.gz
+chmod +x vittoriadb-v0.1.0-linux-amd64
+./vittoriadb-v0.1.0-linux-amd64 run
+```
+
+**From Source:**
+```bash
 go install github.com/antonellof/VittoriaDB/cmd/vittoriadb@latest
-
-# Or download pre-built binary from releases
-# https://github.com/antonellof/VittoriaDB/releases
-
-# Start the server
 vittoriadb run
 ```
 

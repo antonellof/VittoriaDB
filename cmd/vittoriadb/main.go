@@ -14,12 +14,31 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// Build information (set via ldflags)
+var (
+	Version   = "dev"
+	BuildTime = "unknown"
+	GitCommit = "unknown"
+	GitTag    = "unknown"
+)
+
 func main() {
 	app := &cli.App{
 		Name:    "vittoriadb",
 		Usage:   "Simple embedded vector database",
-		Version: "0.1.0",
+		Version: Version,
 		Commands: []*cli.Command{
+			{
+				Name:  "version",
+				Usage: "Show version information",
+				Action: func(c *cli.Context) error {
+					fmt.Printf("VittoriaDB %s\n", Version)
+					fmt.Printf("Build Time: %s\n", BuildTime)
+					fmt.Printf("Git Commit: %s\n", GitCommit)
+					fmt.Printf("Git Tag: %s\n", GitTag)
+					return nil
+				},
+			},
 			{
 				Name:  "run",
 				Usage: "Start the VittoriaDB server",

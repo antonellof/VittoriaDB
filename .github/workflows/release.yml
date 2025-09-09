@@ -1,0 +1,176 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Get version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Build binaries
+      run: |
+        chmod +x scripts/build-releases.sh
+        ./scripts/build-releases.sh ${{ steps.version.outputs.VERSION }}
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        release_name: VittoriaDB ${{ steps.version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+        body: |
+          ## VittoriaDB ${{ steps.version.outputs.VERSION }}
+          
+          🚀 **High-performance embedded vector database for local AI development**
+          
+          ### 📦 **Quick Installation**
+          
+          **Linux (AMD64):**
+          ```bash
+          wget https://github.com/antonellof/VittoriaDB/releases/download/${{ steps.version.outputs.VERSION }}/vittoriadb-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
+          tar -xzf vittoriadb-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
+          chmod +x vittoriadb-${{ steps.version.outputs.VERSION }}-linux-amd64
+          ./vittoriadb-${{ steps.version.outputs.VERSION }}-linux-amd64 run
+          ```
+          
+          **macOS (Apple Silicon):**
+          ```bash
+          wget https://github.com/antonellof/VittoriaDB/releases/download/${{ steps.version.outputs.VERSION }}/vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz
+          tar -xzf vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz
+          chmod +x vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-arm64
+          ./vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-arm64 run
+          ```
+          
+          **macOS (Intel):**
+          ```bash
+          wget https://github.com/antonellof/VittoriaDB/releases/download/${{ steps.version.outputs.VERSION }}/vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-amd64.tar.gz
+          tar -xzf vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-amd64.tar.gz
+          chmod +x vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-amd64
+          ./vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-amd64 run
+          ```
+          
+          ### ✨ **Key Features**
+          - 🎯 **Zero Configuration**: Works immediately after download
+          - ⚡ **High Performance**: HNSW indexing with sub-millisecond search
+          - 📁 **Persistent Storage**: ACID-compliant with Write-Ahead Log
+          - 🔌 **Dual Interface**: REST API + Python client
+          - 🤖 **AI Ready**: Perfect for RAG applications and semantic search
+          
+          ### 🚀 **Quick Test**
+          ```bash
+          # Start VittoriaDB
+          ./vittoriadb-* run &
+          
+          # Create collection and insert vector
+          curl -X POST http://localhost:8080/collections \
+            -H "Content-Type: application/json" \
+            -d '{"name": "test", "dimensions": 4}'
+          
+          curl -X POST http://localhost:8080/collections/test/vectors \
+            -H "Content-Type: application/json" \
+            -d '{"id": "vec1", "vector": [0.1, 0.2, 0.3, 0.4]}'
+          
+          # Search
+          curl "http://localhost:8080/collections/test/search?vector=0.1,0.2,0.3,0.4&limit=5"
+          ```
+          
+          ### 📋 **Checksums**
+          Verify your download integrity using the checksums file.
+          
+          ### 🔗 **Links**
+          - 📖 [Documentation](https://github.com/antonellof/VittoriaDB#readme)
+          - 🐛 [Report Issues](https://github.com/antonellof/VittoriaDB/issues)
+          - 💬 [Discussions](https://github.com/antonellof/VittoriaDB/discussions)
+    
+    - name: Upload Linux AMD64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./releases/${{ steps.version.outputs.VERSION }}/vittoriadb-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
+        asset_name: vittoriadb-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz
+        asset_content_type: application/gzip
+    
+    - name: Upload Linux ARM64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./releases/${{ steps.version.outputs.VERSION }}/vittoriadb-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz
+        asset_name: vittoriadb-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz
+        asset_content_type: application/gzip
+    
+    - name: Upload macOS AMD64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./releases/${{ steps.version.outputs.VERSION }}/vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-amd64.tar.gz
+        asset_name: vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-amd64.tar.gz
+        asset_content_type: application/gzip
+    
+    - name: Upload macOS ARM64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./releases/${{ steps.version.outputs.VERSION }}/vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz
+        asset_name: vittoriadb-${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz
+        asset_content_type: application/gzip
+    
+    - name: Upload Windows AMD64
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./releases/${{ steps.version.outputs.VERSION }}/vittoriadb-${{ steps.version.outputs.VERSION }}-windows-amd64.zip
+        asset_name: vittoriadb-${{ steps.version.outputs.VERSION }}-windows-amd64.zip
+        asset_content_type: application/zip
+    
+    - name: Upload Checksums
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./releases/${{ steps.version.outputs.VERSION }}/checksums-${{ steps.version.outputs.VERSION }}.txt
+        asset_name: checksums-${{ steps.version.outputs.VERSION }}.txt
+        asset_content_type: text/plain
