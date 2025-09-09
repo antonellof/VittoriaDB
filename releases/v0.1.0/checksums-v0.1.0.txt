@@ -1,5 +1,0 @@
-065da11b591476d95badb0dcd3bede401073416cd1699e1d28af969444fb3ec2  vittoriadb-v0.1.0-linux-amd64.tar.gz
-d1de5a84edd58bc7eca37306ee702540a1ebd7530d7f413e25aceb8668d7a6f3  vittoriadb-v0.1.0-linux-arm64.tar.gz
-4655a3e5bbfdda2e60bd45dff8878a936a844a20c7483a9f3289149fc9aa728d  vittoriadb-v0.1.0-darwin-amd64.tar.gz
-3f5fa69266b33721021b7864d50b3cecc023a0c49e8f6dc93a7abfd20ca6982b  vittoriadb-v0.1.0-darwin-arm64.tar.gz
-65c6661e1fc79d6f3d7d44c4f7c5a65640784698a7059417fd5011dd14b37cf5  vittoriadb-v0.1.0-windows-amd64.zip
