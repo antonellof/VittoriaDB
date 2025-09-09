@@ -377,7 +377,7 @@ func backupDatabase(c *cli.Context) error {
 
 func showDatabaseInfo(c *cli.Context) error {
 	dataDir := c.String("data-dir")
-	
+
 	// Get absolute path
 	absDataDir, err := filepath.Abs(dataDir)
 	if err != nil {
@@ -418,7 +418,7 @@ func showDatabaseInfo(c *cli.Context) error {
 		for _, collection := range collections {
 			collectionPath := filepath.Join(absDataDir, collection)
 			fmt.Printf("   • %s/\n", collection)
-			
+
 			// List files in collection directory
 			collectionEntries, err := os.ReadDir(collectionPath)
 			if err != nil {
