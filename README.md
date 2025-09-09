@@ -127,8 +127,18 @@ docker run -p 8080:8080 -v ./data:/data antonellof/vittoriadb:latest
 ### **30-Second Demo**
 
 ```bash
-# 1. Start VittoriaDB
-vittoriadb run &
+# 1. Start VittoriaDB (shows comprehensive startup info)
+vittoriadb run
+# 🚀 VittoriaDB v0.1.0 starting...
+# 📁 Data directory: /Users/you/project/data
+# 🌐 HTTP server: http://localhost:8080
+# 📊 Web dashboard: http://localhost:8080/
+# ⚙️  Configuration:
+#    • Index type: flat
+#    • Distance metric: cosine
+#    • Page size: 4096 bytes
+#    • Cache size: 100 pages
+#    • CORS enabled: true
 
 # 2. Create a collection
 curl -X POST http://localhost:8080/collections \
@@ -143,8 +153,9 @@ curl -X POST http://localhost:8080/collections/docs/vectors \
 # 4. Search for similar vectors
 curl "http://localhost:8080/collections/docs/search?vector=0.1,0.2,0.3,0.4&limit=5"
 
-# 5. Check database stats
-curl http://localhost:8080/stats
+# 5. Check database info
+vittoriadb info
+# Shows data directory, collections, and file sizes
 ```
 
 ### **Python Quick Start**
@@ -640,14 +651,64 @@ kill $SERVER_PID
 
 ## 🔧 Configuration
 
-### Command Line
+### **Data Directory Configuration**
+
+VittoriaDB stores all database files in a configurable data directory:
+
+**Default Location**: `./data` (relative to where you run the command)
+
+**Configuration Options**:
+```bash
+# Command line flag
+vittoriadb run --data-dir /path/to/your/data
+
+# Environment variable
+export VITTORIADB_DATA_DIR=/path/to/your/data
+vittoriadb run
+
+# Custom location examples
+vittoriadb run --data-dir ~/vittoriadb-data
+vittoriadb run --data-dir /var/lib/vittoriadb
+vittoriadb run --data-dir ./my-vectors
+```
+
+**File Structure**:
+```
+data/                           # Main data directory
+├── collection1/               # Each collection has its own directory
+│   ├── metadata.json         # Collection metadata and schema
+│   ├── vectors.json          # Vector data (current implementation)
+│   ├── vectors.db            # Main database file (planned)
+│   ├── vectors.db.wal        # Write-Ahead Log for durability
+│   └── index.hnsw            # HNSW index file
+├── collection2/
+│   ├── metadata.json
+│   └── vectors.json
+└── .vittoriadb/              # Global database metadata (planned)
+    ├── config.json
+    └── locks/
+```
+
+**Database Information**:
+```bash
+# Show current data directory and collections
+vittoriadb info
+
+# Show with custom data directory
+vittoriadb info --data-dir /path/to/data
+
+# Show database statistics
+vittoriadb stats --data-dir /path/to/data
+```
+
+### **Server Configuration**
+
 ```bash
 vittoriadb run \
   --host 0.0.0.0 \
   --port 8080 \
   --data-dir ./data \
-  --index-type hnsw \
-  --log-level info
+  --cors
 ```
 
 ### Configuration File (`vittoriadb.yaml`)

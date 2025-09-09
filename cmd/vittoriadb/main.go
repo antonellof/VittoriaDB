@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -38,6 +39,19 @@ func main() {
 					fmt.Printf("Git Tag: %s\n", GitTag)
 					return nil
 				},
+			},
+			{
+				Name:  "info",
+				Usage: "Show database information and file locations",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "data-dir",
+						Value:   "./data",
+						Usage:   "Data directory path",
+						EnvVars: []string{"VITTORIADB_DATA_DIR"},
+					},
+				},
+				Action: showDatabaseInfo,
 			},
 			{
 				Name:  "run",
@@ -222,9 +236,25 @@ func runServer(c *cli.Context) error {
 		os.Exit(0)
 	}()
 
-	log.Printf("VittoriaDB server starting on http://%s:%d", config.Server.Host, config.Server.Port)
-	log.Printf("Data directory: %s", config.DataDir)
-	log.Printf("Web dashboard: http://%s:%d/", config.Server.Host, config.Server.Port)
+	// Get absolute path for data directory
+	absDataDir, err := filepath.Abs(config.DataDir)
+	if err != nil {
+		absDataDir = config.DataDir
+	}
+
+	// Enhanced startup information
+	log.Printf("🚀 VittoriaDB %s starting...", Version)
+	log.Printf("📁 Data directory: %s", absDataDir)
+	log.Printf("🌐 HTTP server: http://%s:%d", config.Server.Host, config.Server.Port)
+	log.Printf("📊 Web dashboard: http://%s:%d/", config.Server.Host, config.Server.Port)
+	log.Printf("⚙️  Configuration:")
+	log.Printf("   • Index type: %s", config.Index.DefaultType)
+	log.Printf("   • Distance metric: %s", config.Index.DefaultMetric)
+	log.Printf("   • Page size: %d bytes", config.Storage.PageSize)
+	log.Printf("   • Cache size: %d pages", config.Storage.CacheSize)
+	log.Printf("   • CORS enabled: %t", config.Server.CORS)
+	log.Printf("   • Max concurrency: %d", config.Performance.MaxConcurrency)
+	log.Printf("   • Memory limit: %d MB", config.Performance.MemoryLimit/(1024*1024))
 
 	// Start server (blocking)
 	if err := srv.Start(); err != nil {
@@ -343,4 +373,94 @@ func showStats(c *cli.Context) error {
 func backupDatabase(c *cli.Context) error {
 	// TODO: Implement backup functionality
 	return fmt.Errorf("backup functionality not implemented yet")
+}
+
+func showDatabaseInfo(c *cli.Context) error {
+	dataDir := c.String("data-dir")
+	
+	// Get absolute path
+	absDataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		absDataDir = dataDir
+	}
+
+	fmt.Printf("🚀 VittoriaDB %s - Database Information\n", Version)
+	fmt.Println("=====================================")
+	fmt.Printf("📁 Data Directory: %s\n", absDataDir)
+	fmt.Printf("📍 Relative Path: %s\n", dataDir)
+	fmt.Println()
+
+	// Check if data directory exists
+	if _, err := os.Stat(absDataDir); os.IsNotExist(err) {
+		fmt.Printf("❌ Data directory does not exist\n")
+		fmt.Printf("   Run 'vittoriadb run' to create it automatically\n")
+		return nil
+	}
+
+	// List collections
+	entries, err := os.ReadDir(absDataDir)
+	if err != nil {
+		return fmt.Errorf("failed to read data directory: %w", err)
+	}
+
+	collections := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			collections = append(collections, entry.Name())
+		}
+	}
+
+	if len(collections) == 0 {
+		fmt.Printf("📂 Collections: None found\n")
+		fmt.Printf("   Create collections using the API or CLI\n")
+	} else {
+		fmt.Printf("📂 Collections (%d found):\n", len(collections))
+		for _, collection := range collections {
+			collectionPath := filepath.Join(absDataDir, collection)
+			fmt.Printf("   • %s/\n", collection)
+			
+			// List files in collection directory
+			collectionEntries, err := os.ReadDir(collectionPath)
+			if err != nil {
+				fmt.Printf("     ❌ Error reading collection: %v\n", err)
+				continue
+			}
+
+			for _, file := range collectionEntries {
+				if !file.IsDir() {
+					info, err := file.Info()
+					if err != nil {
+						continue
+					}
+					size := info.Size()
+					sizeStr := formatFileSize(size)
+					fmt.Printf("     - %s (%s)\n", file.Name(), sizeStr)
+				}
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Printf("💡 Configuration Options:\n")
+	fmt.Printf("   --data-dir <path>              Set custom data directory\n")
+	fmt.Printf("   VITTORIADB_DATA_DIR=<path>     Environment variable\n")
+	fmt.Println()
+	fmt.Printf("🔧 Management Commands:\n")
+	fmt.Printf("   vittoriadb run --data-dir <path>    Start server with custom directory\n")
+	fmt.Printf("   vittoriadb stats --data-dir <path>  Show database statistics\n")
+
+	return nil
+}
+
+func formatFileSize(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
