@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/antonellof/VittoriaDB/pkg/embeddings"
 )
 
 // VittoriaDB implements the Database interface
@@ -124,6 +126,16 @@ func (db *VittoriaDB) CreateCollection(ctx context.Context, req *CreateCollectio
 	// Initialize collection
 	if err := collection.Initialize(ctx); err != nil {
 		return fmt.Errorf("failed to initialize collection: %w", err)
+	}
+
+	// Set up vectorizer if configured
+	if req.VectorizerConfig != nil {
+		factory := embeddings.NewVectorizerFactory()
+		vectorizer, err := factory.CreateVectorizer(req.VectorizerConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create vectorizer: %w", err)
+		}
+		collection.SetVectorizer(vectorizer)
 	}
 
 	db.collections[req.Name] = collection

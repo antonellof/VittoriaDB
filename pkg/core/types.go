@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"time"
+
+	"github.com/antonellof/VittoriaDB/pkg/embeddings"
 )
 
 // DistanceMetric represents the distance calculation method
@@ -60,13 +62,21 @@ type Vector struct {
 	Metadata map[string]interface{} `json:"metadata"`
 }
 
+// TextVector represents text that will be automatically vectorized
+type TextVector struct {
+	ID       string                 `json:"id"`
+	Text     string                 `json:"text"`
+	Metadata map[string]interface{} `json:"metadata"`
+}
+
 // CreateCollectionRequest represents a collection creation request
 type CreateCollectionRequest struct {
-	Name       string                 `json:"name"`
-	Dimensions int                    `json:"dimensions"`
-	Metric     DistanceMetric         `json:"metric"`
-	IndexType  IndexType              `json:"index_type"`
-	Config     map[string]interface{} `json:"config"`
+	Name             string                       `json:"name"`
+	Dimensions       int                          `json:"dimensions"`
+	Metric           DistanceMetric               `json:"metric"`
+	IndexType        IndexType                    `json:"index_type"`
+	Config           map[string]interface{}       `json:"config"`
+	VectorizerConfig *embeddings.VectorizerConfig `json:"vectorizer_config,omitempty"`
 }
 
 // SearchRequest represents a vector search request
@@ -257,10 +267,19 @@ type Collection interface {
 	Get(ctx context.Context, id string) (*Vector, error)
 	Delete(ctx context.Context, id string) error
 
+	// Text operations (automatic vectorization)
+	InsertText(ctx context.Context, textVector *TextVector) error
+	InsertTextBatch(ctx context.Context, textVectors []*TextVector) error
+
 	// Search
 	Search(ctx context.Context, req *SearchRequest) (*SearchResponse, error)
+	SearchText(ctx context.Context, query string, limit int, filter *Filter) (*SearchResponse, error)
 
 	// Maintenance
 	Compact(ctx context.Context) error
 	Flush(ctx context.Context) error
+
+	// Vectorizer access
+	HasVectorizer() bool
+	GetVectorizer() embeddings.Vectorizer
 }

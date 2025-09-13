@@ -85,6 +85,11 @@ func (s *Server) setupRoutes() {
 	s.router.HandleFunc("/collections/{name}/vectors/{id}", s.handleVector).Methods("GET", "DELETE")
 	s.router.HandleFunc("/collections/{name}/search", s.handleSearch).Methods("GET", "POST")
 
+	// Text vectorization operations (automatic embedding generation)
+	s.router.HandleFunc("/collections/{name}/text", s.handleTextInsert).Methods("POST")
+	s.router.HandleFunc("/collections/{name}/text/batch", s.handleTextBatch).Methods("POST")
+	s.router.HandleFunc("/collections/{name}/search/text", s.handleTextSearch).Methods("GET", "POST")
+
 	// Document processing
 	s.router.HandleFunc("/collections/{name}/documents", s.handleDocumentUpload).Methods("POST")
 	s.router.HandleFunc("/documents/process", s.handleDocumentProcess).Methods("POST")
@@ -584,6 +589,149 @@ curl "http://localhost:8080/collections/docs/search?vector=0.1,0.2,0.3,0.4&limit
 	w.Write([]byte(html))
 }
 
+// Text insertion endpoint (automatic vectorization)
+func (s *Server) handleTextInsert(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+
+	collection, err := s.db.GetCollection(r.Context(), name)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			s.writeError(w, http.StatusNotFound, "Collection not found", err)
+		} else {
+			s.writeError(w, http.StatusInternalServerError, "Failed to get collection", err)
+		}
+		return
+	}
+
+	var textVector core.TextVector
+	if err := json.NewDecoder(r.Body).Decode(&textVector); err != nil {
+		s.writeError(w, http.StatusBadRequest, "Invalid JSON", err)
+		return
+	}
+
+	// Check if collection has vectorizer
+	if !collection.HasVectorizer() {
+		s.writeError(w, http.StatusBadRequest, "Collection does not have vectorizer configured", nil)
+		return
+	}
+
+	if err := collection.InsertText(r.Context(), &textVector); err != nil {
+		s.writeError(w, http.StatusBadRequest, "Failed to insert text", err)
+		return
+	}
+
+	response := map[string]string{
+		"status": "inserted",
+		"id":     textVector.ID,
+	}
+
+	s.writeJSON(w, http.StatusCreated, response)
+}
+
+// Batch text insertion endpoint (automatic vectorization)
+func (s *Server) handleTextBatch(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+
+	collection, err := s.db.GetCollection(r.Context(), name)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			s.writeError(w, http.StatusNotFound, "Collection not found", err)
+		} else {
+			s.writeError(w, http.StatusInternalServerError, "Failed to get collection", err)
+		}
+		return
+	}
+
+	var req struct {
+		Texts []*core.TextVector `json:"texts"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "Invalid JSON", err)
+		return
+	}
+
+	// Check if collection has vectorizer
+	if !collection.HasVectorizer() {
+		s.writeError(w, http.StatusBadRequest, "Collection does not have vectorizer configured", nil)
+		return
+	}
+
+	if err := collection.InsertTextBatch(r.Context(), req.Texts); err != nil {
+		s.writeError(w, http.StatusBadRequest, "Failed to insert texts", err)
+		return
+	}
+
+	response := map[string]interface{}{
+		"status":   "inserted",
+		"inserted": len(req.Texts),
+		"failed":   0,
+	}
+
+	s.writeJSON(w, http.StatusCreated, response)
+}
+
+// Text search endpoint (automatic query vectorization)
+func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+
+	collection, err := s.db.GetCollection(r.Context(), name)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			s.writeError(w, http.StatusNotFound, "Collection not found", err)
+		} else {
+			s.writeError(w, http.StatusInternalServerError, "Failed to get collection", err)
+		}
+		return
+	}
+
+	// Check if collection has vectorizer
+	if !collection.HasVectorizer() {
+		s.writeError(w, http.StatusBadRequest, "Collection does not have vectorizer configured", nil)
+		return
+	}
+
+	// Parse query parameters
+	query := r.URL.Query().Get("query")
+	if query == "" {
+		// Try to get query from POST body
+		if r.Method == "POST" {
+			var req struct {
+				Query string `json:"query"`
+				Limit int    `json:"limit"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				s.writeError(w, http.StatusBadRequest, "Invalid JSON or missing query parameter", err)
+				return
+			}
+			query = req.Query
+		} else {
+			s.writeError(w, http.StatusBadRequest, "Missing query parameter", nil)
+			return
+		}
+	}
+
+	// Parse limit parameter
+	limit := 10 // default
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+
+	// Perform text search with automatic vectorization
+	results, err := collection.SearchText(r.Context(), query, limit, nil)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "Search failed", err)
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, results)
+}
+
 // Middleware functions
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
@@ -709,28 +857,53 @@ func (s *Server) handleDocumentUpload(w http.ResponseWriter, r *http.Request) {
 	// Insert document chunks as vectors (placeholder - would need embedding generation)
 	var insertedChunks []string
 	for _, chunk := range doc.Chunks {
-		// TODO: Generate embeddings for chunk.Content
-		// For now, create placeholder vector
-		vector := &core.Vector{
-			ID:     chunk.ID,
-			Vector: make([]float32, 384), // Placeholder vector
-			Metadata: map[string]interface{}{
-				"document_id":    doc.ID,
-				"document_title": doc.Title,
-				"chunk_content":  chunk.Content,
-				"chunk_position": chunk.Position,
-				"chunk_size":     chunk.Size,
-			},
-		}
+		// Use automatic text vectorization if collection has vectorizer
+		if collection.HasVectorizer() {
+			// Create TextVector for automatic embedding generation
+			textVector := &core.TextVector{
+				ID:   chunk.ID,
+				Text: chunk.Content,
+				Metadata: map[string]interface{}{
+					"document_id":    doc.ID,
+					"document_title": doc.Title,
+					"chunk_content":  chunk.Content,
+					"chunk_position": chunk.Position,
+					"chunk_size":     chunk.Size,
+				},
+			}
 
-		// Add chunk metadata
-		for k, v := range chunk.Metadata {
-			vector.Metadata["chunk_"+k] = v
-		}
+			// Add chunk metadata
+			for k, v := range chunk.Metadata {
+				textVector.Metadata["chunk_"+k] = v
+			}
 
-		if err := collection.Insert(r.Context(), vector); err != nil {
-			log.Printf("Failed to insert chunk %s: %v", chunk.ID, err)
-			continue
+			if err := collection.InsertText(r.Context(), textVector); err != nil {
+				log.Printf("Failed to insert text chunk %s: %v", chunk.ID, err)
+				continue
+			}
+		} else {
+			// Fallback to placeholder vector for collections without vectorizer
+			vector := &core.Vector{
+				ID:     chunk.ID,
+				Vector: make([]float32, 384), // Placeholder vector
+				Metadata: map[string]interface{}{
+					"document_id":    doc.ID,
+					"document_title": doc.Title,
+					"chunk_content":  chunk.Content,
+					"chunk_position": chunk.Position,
+					"chunk_size":     chunk.Size,
+				},
+			}
+
+			// Add chunk metadata
+			for k, v := range chunk.Metadata {
+				vector.Metadata["chunk_"+k] = v
+			}
+
+			if err := collection.Insert(r.Context(), vector); err != nil {
+				log.Printf("Failed to insert chunk %s: %v", chunk.ID, err)
+				continue
+			}
 		}
 
 		insertedChunks = append(insertedChunks, chunk.ID)

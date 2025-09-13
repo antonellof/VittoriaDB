@@ -15,12 +15,15 @@ from pathlib import Path
 
 from .types import (
     Vector,
+    TextVector,
     SearchResult,
     CollectionInfo,
     HealthStatus,
     DatabaseStats,
     DistanceMetric,
     IndexType,
+    VectorizerType,
+    VectorizerConfig,
     VittoriaDBError,
     ConnectionError,
     CollectionError,
@@ -182,7 +185,8 @@ class VittoriaDB:
                          dimensions: int,
                          metric: Union[DistanceMetric, str] = DistanceMetric.COSINE,
                          index_type: Union[IndexType, str] = IndexType.FLAT,
-                         config: Optional[Dict[str, Any]] = None) -> 'Collection':
+                         config: Optional[Dict[str, Any]] = None,
+                         vectorizer_config: Optional[VectorizerConfig] = None) -> 'Collection':
         """Create a new vector collection."""
         # Convert to enum values and then to integers (Go server expects integers)
         if isinstance(metric, DistanceMetric):
@@ -206,6 +210,10 @@ class VittoriaDB:
             "index_type": index_int,
             "config": config or {}
         }
+        
+        # Add vectorizer configuration if provided
+        if vectorizer_config:
+            payload["vectorizer_config"] = vectorizer_config.to_dict()
         
         response = self._make_request("POST", "/collections", json=payload)
         self._handle_response(response)
@@ -294,6 +302,55 @@ class Collection:
         # Invalidate cached info
         self._info = None
     
+    def insert_text(self, 
+                   id: str, 
+                   text: str,
+                   metadata: Optional[Dict[str, Any]] = None) -> None:
+        """Insert text that will be automatically vectorized by the server."""
+        payload = {
+            "id": id,
+            "text": text,
+            "metadata": metadata or {}
+        }
+        
+        response = self.client._make_request(
+            "POST", 
+            f"/collections/{self.name}/text", 
+            json=payload
+        )
+        self.client._handle_response(response)
+        
+        # Invalidate cached info
+        self._info = None
+    
+    def insert_text_batch(self, text_vectors: List[Union[TextVector, Dict[str, Any]]]) -> Dict[str, Any]:
+        """Insert multiple text vectors that will be automatically vectorized by the server."""
+        # Convert TextVector objects to dictionaries
+        text_dicts = []
+        for text_vector in text_vectors:
+            if isinstance(text_vector, TextVector):
+                text_dicts.append({
+                    "id": text_vector.id,
+                    "text": text_vector.text,
+                    "metadata": text_vector.metadata or {}
+                })
+            else:
+                text_dicts.append(text_vector)
+        
+        payload = {"texts": text_dicts}
+        
+        response = self.client._make_request(
+            "POST", 
+            f"/collections/{self.name}/text/batch", 
+            json=payload
+        )
+        result = self.client._handle_response(response)
+        
+        # Invalidate cached info
+        self._info = None
+        
+        return result
+    
     def insert_batch(self, vectors: List[Union[Vector, Dict[str, Any]]]) -> Dict[str, Any]:
         """Insert multiple vectors."""
         # Convert Vector objects to dictionaries
@@ -344,6 +401,38 @@ class Collection:
         response = self.client._make_request(
             "GET", 
             f"/collections/{self.name}/search",
+            params=params
+        )
+        data = self.client._handle_response(response)
+        
+        results = []
+        for result_data in data.get("results", []):
+            results.append(SearchResult.from_dict(result_data))
+        
+        return results
+    
+    def search_text(self,
+                   query: str,
+                   limit: int = 10,
+                   offset: int = 0,
+                   filter: Optional[Dict[str, Any]] = None,
+                   include_vector: bool = False,
+                   include_metadata: bool = True) -> List[SearchResult]:
+        """Search using text query (automatically vectorized by the server)."""
+        params = {
+            "query": query,
+            "limit": limit,
+            "offset": offset,
+            "include_vector": str(include_vector).lower(),
+            "include_metadata": str(include_metadata).lower()
+        }
+        
+        if filter:
+            params["filter"] = json.dumps(filter)
+        
+        response = self.client._make_request(
+            "GET", 
+            f"/collections/{self.name}/search/text",
             params=params
         )
         data = self.client._handle_response(response)
@@ -472,7 +561,7 @@ def connect(url: Optional[str] = None, **kwargs) -> VittoriaDB:
 
 def embed(data_dir: str) -> VittoriaDB:
     """Create embedded VittoriaDB instance (future feature)."""
-    raise NotImplementedError("Embedded mode coming in v0.2")
+    raise NotImplementedError("Embedded mode not yet implemented - use connect() for now")
 
 
 # Utility functions

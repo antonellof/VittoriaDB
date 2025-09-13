@@ -26,10 +26,13 @@ Example usage:
 from .client import VittoriaDB, Collection, connect
 from .types import (
     Vector,
+    TextVector,
     SearchResult,
     CollectionInfo,
     DistanceMetric,
     IndexType,
+    VectorizerType,
+    VectorizerConfig,
     VittoriaDBError,
     ConnectionError,
     CollectionError,
@@ -37,6 +40,7 @@ from .types import (
     SearchError,
     BinaryError
 )
+from .configure import Configure
 
 __version__ = "0.1.0"
 __author__ = "VittoriaDB Team"
@@ -47,10 +51,14 @@ __all__ = [
     "Collection", 
     "connect",
     "Vector",
+    "TextVector",
     "SearchResult",
     "CollectionInfo",
     "DistanceMetric",
     "IndexType",
+    "VectorizerType",
+    "VectorizerConfig",
+    "Configure",
     "VittoriaDBError",
     "ConnectionError",
     "CollectionError",

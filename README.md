@@ -16,10 +16,16 @@
 ## ✨ Key Features
 
 - **🎯 Zero Configuration**: Works immediately after installation
+- **🤖 Professional Embedding Services**: Industry-standard vectorization options
+  - **Ollama**: Local ML models (high quality, no API costs)
+  - **OpenAI**: Cloud API (highest quality, paid)
+  - **HuggingFace**: Cloud API (good quality, free tier)
+  - **Sentence Transformers**: Local Python models (full control)
+  - **Pure Vector DB**: Bring your own embeddings
 - **⚡ High Performance**: HNSW indexing with sub-millisecond search times
 - **📁 Persistent Storage**: ACID-compliant file-based storage with WAL
 - **🔌 Dual Interface**: REST API + Native Python client
-- **🤖 AI-Ready**: Built for RAG, semantic search, and embedding workflows
+- **🧠 AI-Ready**: Built for RAG, semantic search, and embedding workflows
 - **📦 Single Binary**: No dependencies, cross-platform support
 - **🔒 Local First**: Keep your data private and secure
 
@@ -27,6 +33,7 @@
 
 - **[📦 Installation Guide](docs/installation.md)** - Complete installation instructions for all platforms
 - **[🚀 Quick Start](#-quick-start)** - Get started in 30 seconds
+- **[🤖 Embedding Services](docs/embeddings.md)** - Complete guide to auto_embeddings() and vectorizers
 - **[📖 Usage Examples](#-usage-examples)** - Python, Go, and cURL examples
 - **[🛠️ API Reference](docs/api.md)** - Complete REST API documentation
 - **[⚙️ Configuration](docs/configuration.md)** - Server and storage configuration
@@ -80,24 +87,189 @@ curl "http://localhost:8080/collections/docs/search?vector=0.1,0.2,0.3,0.4&limit
 ```
 
 ### Python Quick Start
+
+VittoriaDB offers **four professional approaches** for handling embeddings:
+
+#### 🔧 **Approach 1: Ollama (Recommended)**
 ```python
 import vittoriadb
+from vittoriadb.configure import Configure
 
 # Connect to running server
 db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
 
-# Create collection and insert vectors
-collection = db.create_collection("documents", dimensions=384)
-collection.insert("doc1", [0.1] * 384, {"title": "My Document"})
+# Create collection with Ollama local ML models (requires: ollama pull nomic-embed-text)
+collection = db.create_collection(
+    name="documents", 
+    dimensions=768,  # nomic-embed-text dimensions
+    vectorizer_config=Configure.Vectors.auto_embeddings()  # 🎯 Local ML!
+)
 
-# Search
-results = collection.search([0.1] * 384, limit=10)
+# Insert text directly - server generates embeddings using local ML model
+collection.insert_text("doc1", "Your document content here", {"title": "My Document"})
+
+# Search with text - server generates query embedding using local ML model
+results = collection.search_text("find similar documents", limit=10)
 print(f"Found {len(results)} results")
 ```
 
-## 🏗️ Architecture
+#### 🤖 **Approach 2: OpenAI API (Highest Quality)**
+```python
+# OpenAI embeddings (highest quality, requires API key + credits)
+collection = db.create_collection(
+    name="openai_docs",
+    dimensions=1536,
+    vectorizer_config=Configure.Vectors.openai_embeddings(api_key="your_openai_key")
+)
+```
 
-VittoriaDB is a single-process binary that combines an HTTP server, vector engine, and storage layer. It stores data in a configurable directory with separate files for vectors, indexes, metadata, and write-ahead logs.
+#### 🤗 **Approach 3: HuggingFace API (Free Tier)**
+```python
+# HuggingFace embeddings (good quality, free tier available)
+collection = db.create_collection(
+    name="hf_docs", 
+    dimensions=384,
+    vectorizer_config=Configure.Vectors.huggingface_embeddings(api_key="your_hf_token")
+)
+```
+
+#### 🐍 **Approach 4: Sentence Transformers (Local Python)**
+```python
+# Local Python models (full control, heavy dependencies)
+collection = db.create_collection(
+    name="local_docs",
+    dimensions=384,
+    vectorizer_config=Configure.Vectors.sentence_transformers()
+)
+```
+
+#### 💎 **Approach 5: Pure Vector Database (Manual Embeddings)**
+```python
+import vittoriadb
+from sentence_transformers import SentenceTransformer
+
+db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
+model = SentenceTransformer('all-MiniLM-L6-v2')  # Client-side model
+
+# Create collection without vectorizer
+collection = db.create_collection(name="documents", dimensions=384)
+
+# Generate embeddings on client side
+text = "Your document content here"
+embedding = model.encode(text).tolist()
+collection.insert("doc1", embedding, {"title": "My Document", "content": text})
+
+# Generate query embedding on client side
+query_embedding = model.encode("find similar documents").tolist()
+results = collection.search(query_embedding, limit=10)
+print(f"Found {len(results)} results")
+```
+
+## 🤖 auto_embeddings(): The Smart Default
+
+The `Configure.Vectors.auto_embeddings()` function is VittoriaDB's **intelligent embedding solution** that provides the best balance of quality, performance, and ease of use.
+
+### What Makes auto_embeddings() Special?
+
+```python
+# One line for professional ML embeddings
+vectorizer_config = Configure.Vectors.auto_embeddings()
+```
+
+**Behind the scenes, auto_embeddings():**
+1. **Uses Ollama local ML models** - Real neural networks, not statistical approximations
+2. **Requires minimal setup** - Just `ollama pull nomic-embed-text`
+3. **Works completely offline** - No API keys, no internet required
+4. **Provides high quality** - 85-95% accuracy comparable to cloud APIs
+5. **Costs nothing to run** - No per-request charges or rate limits
+
+### Why Choose auto_embeddings()?
+
+| Traditional Approach | auto_embeddings() Advantage |
+|---------------------|------------------------------|
+| ❌ Complex model management | ✅ One-line configuration |
+| ❌ API costs and rate limits | ✅ Completely free to use |
+| ❌ Internet dependency | ✅ Works offline |
+| ❌ Statistical approximations | ✅ Real ML neural networks |
+| ❌ Vendor lock-in | ✅ Open-source local models |
+
+### Quick Setup
+
+```bash
+# 1. Install Ollama (one-time setup)
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# 2. Start Ollama service
+ollama serve
+
+# 3. Pull embedding model (one-time download)
+ollama pull nomic-embed-text
+
+# 4. Use with VittoriaDB
+python -c "
+import vittoriadb
+from vittoriadb.configure import Configure
+
+db = vittoriadb.connect()
+collection = db.create_collection(
+    name='test',
+    dimensions=768,
+    vectorizer_config=Configure.Vectors.auto_embeddings()
+)
+print('✅ Ready for high-quality local ML embeddings!')
+"
+```
+
+> 📖 **See [Embedding Services Guide](docs/embeddings.md) for complete documentation, advanced configuration, and comparison of all vectorizer options.**
+
+## 🏗️ Architecture & Embedding Approaches
+
+VittoriaDB is a single-process binary that combines an HTTP server, vector engine, and storage layer. It offers **professional external embedding services** following industry best practices:
+
+### 🔧 **External Service Architecture**
+
+**Clean delegation to specialized embedding services**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Python Client: Configure.Vectors.auto_embeddings()         │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ HTTP Request (text)
+┌─────────────────────▼───────────────────────────────────────┐
+│ VittoriaDB Server: External Service Delegation             │
+│ ├─ Text preprocessing and validation                       │
+│ ├─ Route to appropriate external service                   │
+│ └─ Handle API calls and error management                   │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ Delegate to external services
+┌─────────────────────▼───────────────────────────────────────┐
+│ External Embedding Services (Real ML Models)               │
+│ ├─ 🔧 Ollama: Local ML models (localhost:11434)           │
+│ ├─ 🤖 OpenAI: Cloud API (api.openai.com)                  │
+│ ├─ 🤗 HuggingFace: Cloud API (api-inference.huggingface.co)│
+│ └─ 🐍 Sentence Transformers: Python subprocess            │
+└─────────────────────┬───────────────────────────────────────┘
+                      │ Return high-quality embeddings
+┌─────────────────────▼───────────────────────────────────────┐
+│ Vector Storage & Search Engine                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- ✅ **Industry standard** - follows patterns used by Weaviate, Pinecone, Qdrant
+- ✅ **High-quality embeddings** - real ML models, not statistical approximations
+- ✅ **Flexible deployment** - local ML, cloud APIs, or Python processes
+- ✅ **Maintainable codebase** - no complex local ML implementations
+- ✅ **Future-proof** - easy to add new services as they emerge
+
+### 🎯 **Service Comparison**
+
+| Service | Quality | Speed | Setup | Cost | Best For |
+|---------|---------|-------|-------|------|----------|
+| **🔧 Ollama** | High (85-95%) | Fast (~500ms) | `ollama pull nomic-embed-text` | Free | **Recommended** |
+| **🤖 OpenAI** | Highest (95%+) | Medium (~300ms) | API key required | $0.0001/1K tokens | **Highest Quality** |
+| **🤗 HuggingFace** | High (80-90%) | Medium (~500ms) | API token | Free tier | **Cost Effective** |
+| **🐍 Sentence Transformers** | High (85-95%) | Slow (~5s) | `pip install sentence-transformers` | Free | **Full Control** |
 
 > 📖 **See [Performance Guide](docs/performance.md) for detailed architecture diagrams and performance characteristics.**
 

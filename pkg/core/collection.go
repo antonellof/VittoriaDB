@@ -8,20 +8,23 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/antonellof/VittoriaDB/pkg/embeddings"
 )
 
 // VittoriaCollection implements the Collection interface
 type VittoriaCollection struct {
-	name        string
-	dimensions  int
-	metric      DistanceMetric
-	indexType   IndexType
-	dataDir     string
-	vectors     map[string]*Vector
-	mu          sync.RWMutex
-	created     time.Time
-	modified    time.Time
-	closed      bool
+	name       string
+	dimensions int
+	metric     DistanceMetric
+	indexType  IndexType
+	dataDir    string
+	vectors    map[string]*Vector
+	mu         sync.RWMutex
+	created    time.Time
+	modified   time.Time
+	closed     bool
+	vectorizer embeddings.Vectorizer
 }
 
 // CollectionMetadata represents collection metadata stored on disk
@@ -387,13 +390,13 @@ func (c *VittoriaCollection) Info() (*CollectionInfo, error) {
 	count, _ := c.Count()
 
 	return &CollectionInfo{
-		Name:         c.name,
-		Dimensions:   c.dimensions,
-		Metric:       c.metric,
-		IndexType:    c.indexType,
-		VectorCount:  count,
-		Created:      c.created,
-		Modified:     c.modified,
+		Name:        c.name,
+		Dimensions:  c.dimensions,
+		Metric:      c.metric,
+		IndexType:   c.indexType,
+		VectorCount: count,
+		Created:     c.created,
+		Modified:    c.modified,
 	}, nil
 }
 
@@ -564,10 +567,103 @@ func sqrt(x float64) float64 {
 	if x == 0 {
 		return 0
 	}
-	
+
 	z := x
 	for i := 0; i < 10; i++ {
 		z = (z + x/z) / 2
 	}
 	return z
+}
+
+// InsertText inserts text that will be automatically vectorized
+func (c *VittoriaCollection) InsertText(ctx context.Context, textVector *TextVector) error {
+	if c.vectorizer == nil {
+		return fmt.Errorf("no vectorizer configured for collection '%s'", c.name)
+	}
+
+	// Generate embedding from text
+	embedding, err := c.vectorizer.GenerateEmbedding(ctx, textVector.Text)
+	if err != nil {
+		return fmt.Errorf("failed to generate embedding: %w", err)
+	}
+
+	// Create vector and insert
+	vector := &Vector{
+		ID:       textVector.ID,
+		Vector:   embedding,
+		Metadata: textVector.Metadata,
+	}
+
+	return c.Insert(ctx, vector)
+}
+
+// InsertTextBatch inserts multiple text vectors that will be automatically vectorized
+func (c *VittoriaCollection) InsertTextBatch(ctx context.Context, textVectors []*TextVector) error {
+	if c.vectorizer == nil {
+		return fmt.Errorf("no vectorizer configured for collection '%s'", c.name)
+	}
+
+	// Extract texts for batch embedding generation
+	texts := make([]string, len(textVectors))
+	for i, tv := range textVectors {
+		texts[i] = tv.Text
+	}
+
+	// Generate embeddings in batch
+	embeddings, err := c.vectorizer.GenerateEmbeddings(ctx, texts)
+	if err != nil {
+		return fmt.Errorf("failed to generate embeddings: %w", err)
+	}
+
+	// Create vectors and insert
+	vectors := make([]*Vector, len(textVectors))
+	for i, tv := range textVectors {
+		vectors[i] = &Vector{
+			ID:       tv.ID,
+			Vector:   embeddings[i],
+			Metadata: tv.Metadata,
+		}
+	}
+
+	return c.InsertBatch(ctx, vectors)
+}
+
+// SearchText performs text-based search (automatically vectorizes query)
+func (c *VittoriaCollection) SearchText(ctx context.Context, query string, limit int, filter *Filter) (*SearchResponse, error) {
+	if c.vectorizer == nil {
+		return nil, fmt.Errorf("no vectorizer configured for collection '%s'", c.name)
+	}
+
+	// Generate embedding from query text
+	queryEmbedding, err := c.vectorizer.GenerateEmbedding(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate query embedding: %w", err)
+	}
+
+	// Create search request
+	searchReq := &SearchRequest{
+		Vector:          queryEmbedding,
+		Limit:           limit,
+		Offset:          0,
+		Filter:          filter,
+		IncludeVector:   false,
+		IncludeMetadata: true,
+	}
+
+	return c.Search(ctx, searchReq)
+}
+
+// HasVectorizer returns true if the collection has a vectorizer configured
+func (c *VittoriaCollection) HasVectorizer() bool {
+	return c.vectorizer != nil
+}
+
+// GetVectorizer returns the collection's vectorizer
+func (c *VittoriaCollection) GetVectorizer() embeddings.Vectorizer {
+	return c.vectorizer
+}
+
+// SetVectorizer sets the collection's vectorizer
+func (c *VittoriaCollection) SetVectorizer(vectorizer embeddings.Vectorizer) {
+	c.vectorizer = vectorizer
 }
