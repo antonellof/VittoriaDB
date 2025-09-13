@@ -119,10 +119,10 @@ git clone https://github.com/antonellof/VittoriaDB.git
 cd VittoriaDB
 
 # Install Python package in development mode
-cd python && ./install-dev.sh
+cd sdk/python && ./install-dev.sh
 
 # Or manually install in editable mode
-pip install -e ./python
+pip install -e ./sdk/python
 ```
 
 ```python
@@ -252,46 +252,50 @@ db.close()
 
 ### **Complete Examples**
 
-The [`examples/`](examples/) directory contains comprehensive, production-ready examples:
+The [`examples/`](examples/) directory contains comprehensive, production-ready examples organized by language:
 
-#### 🤖 **RAG Complete Example** (`rag_complete_example.py`)
-Full RAG system with VittoriaDB:
-- Document ingestion and processing
-- Sentence Transformer embeddings  
-- Semantic search and retrieval
-- Interactive Q&A system
-- Sample knowledge base
+```
+examples/
+├── python/          # Python client examples
+├── go/             # Go native examples  
+├── curl/           # HTTP API examples with bash/curl
+├── documents/      # Sample documents for testing
+└── README.md       # Detailed documentation
+```
 
-#### 📄 **Document Processing** (`document_processing_example.py`)
-Multi-format document processing:
-- PDF, DOCX, TXT, MD, HTML support
-- Intelligent chunking strategies
-- Metadata extraction
-- Collection management
+#### 🐍 **Python Examples** (`python/`)
+- **RAG Complete Example**: Full RAG system with Sentence Transformers
+- **Document Processing**: Multi-format document handling (PDF, DOCX, HTML, etc.)
+- **Performance Benchmarks**: Comprehensive testing suite with memory monitoring
+- **Basic Usage**: Simple introduction to the Python SDK
 
-#### 📊 **Performance Benchmarks** (`performance_benchmark.py`)
-Comprehensive performance testing:
-- Insert/search benchmarks
-- Index type comparisons
-- Memory usage monitoring
-- Detailed performance reports
+#### 🔧 **Go Examples** (`go/`)
+- **Basic Usage**: Complete HTTP client implementation
+- **RAG System**: End-to-end RAG implementation in Go
+- **Volume Benchmark**: High-performance testing with native SDK integration
+- **Advanced Features**: Complex operations and edge case testing
 
-#### 🔧 **Go Examples** (`simple_demo.go`, `test_advanced_features.go`)
-Direct API usage and advanced features testing.
+#### 🌐 **HTTP API Examples** (`curl/`)
+- **Basic Usage**: Complete workflow with bash/cURL
+- **Volume Testing**: Multi-scale performance testing (KB/MB/GB)
+- **RAG System**: Full RAG implementation via HTTP API
 
 **Quick Start:**
 ```bash
 # Start VittoriaDB
 ./vittoriadb run
 
-# Run RAG example
-python examples/rag_complete_example.py
+# Python examples (requires: cd sdk/python && ./install-dev.sh)
+python examples/python/rag_complete_example.py
+python examples/python/performance_benchmark.py
 
-# Run document processing
-python examples/document_processing_example.py
+# Go examples
+cd examples/go && go run basic_usage.go
+cd examples/go && go run volume_benchmark.go
 
-# Run benchmarks  
-python examples/performance_benchmark.py
+# cURL examples
+cd examples/curl && ./basic_usage.sh
+cd examples/curl && ./volume_test.sh
 ```
 
 > 📖 **See [examples/README.md](examples/README.md) for detailed documentation and requirements.**
@@ -702,14 +706,24 @@ kill $SERVER_PID
 ## 🎯 Performance
 
 ### **Benchmarks (v0.2.0)**
-- **Insert Speed**: >10k vectors/second (flat index), >5k vectors/second (HNSW)
-- **Search Speed**: <1ms for 1M vectors (HNSW), <10ms (flat index)
-- **Memory Usage**: <100MB for 100k vectors (384 dimensions)
+- **Insert Speed**: >2.6M vectors/second (HNSW, small datasets), >1.7M vectors/second (large datasets)
+- **Search Speed**: <1ms for small datasets (HNSW), sub-millisecond latency for optimized queries
+- **Memory Usage**: Linear scaling - 1MB for 1K vectors, 167MB for 50K vectors (768 dimensions)
 - **Startup Time**: <100ms (cold start), <50ms (warm start)
 - **Binary Size**: ~8MB (compressed), ~25MB (uncompressed)
 - **Index Build**: <2 seconds for 100k vectors (HNSW)
 - **Document Processing**: >1000 documents/minute (PDF/DOCX)
 - **Python Client**: Zero-overhead connection management
+
+### **Comprehensive Performance Results**
+📊 **[View Complete Benchmark Results](https://gist.github.com/antonellof/19069bb56573fcf72ce592b3c2f2fc74)** - Detailed performance testing with Native Go SDK integration
+
+**Key Performance Highlights:**
+- **Peak Insert Rate**: 2,645,209 vectors/sec (HNSW, small dataset)
+- **Peak Search Rate**: 1,266.72 searches/sec (HNSW, small dataset)  
+- **Lowest Latency**: 789.44µs (HNSW, small dataset)
+- **Large-Scale Performance**: 1,685,330 vectors/sec for 87.89 MB dataset
+- **Memory Efficiency**: Linear scaling with excellent performance characteristics
 
 ### **Scaling Characteristics**
 - **Vectors**: Tested up to 1M vectors (10M planned)
@@ -1057,7 +1071,7 @@ go build -o vittoriadb ./cmd/vittoriadb
 #### 3. Build Python Package (Optional)
 ```bash
 # Navigate to Python package directory
-cd python
+cd sdk/python
 
 # Option 1: Use the development installation script (recommended)
 ./install-dev.sh
@@ -1224,11 +1238,11 @@ go mod tidy
 **4. Python Import Errors**
 ```bash
 # Reinstall Python package using the development script
-cd python && ./install-dev.sh
+cd sdk/python && ./install-dev.sh
 
 # Or manually reinstall
 pip uninstall vittoriadb
-pip install -e ./python
+pip install -e ./sdk/python
 
 # Check Python path
 python -c "import sys; print(sys.path)"
@@ -1257,9 +1271,13 @@ vittoriadb/
 │   ├── server/               # HTTP API server
 │   ├── processor/            # Document processing
 │   └── embeddings/           # Embedding integrations
-├── python/vittoriadb/        # Python package
+├── sdk/python/vittoriadb/    # Python SDK package
+├── examples/                 # Code examples (Python, Go, cURL)
+│   ├── python/              # Python client examples
+│   ├── go/                  # Go native examples
+│   ├── curl/                # HTTP API examples
+│   └── documents/           # Sample documents
 ├── docs/                     # Documentation
-├── examples/                 # Code examples
 └── tests/                    # Test suites
 ```
 

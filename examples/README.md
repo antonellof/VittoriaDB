@@ -1,13 +1,24 @@
 # VittoriaDB Examples
 
-This directory contains comprehensive examples demonstrating VittoriaDB's capabilities across different use cases and programming languages.
+This directory contains comprehensive examples demonstrating VittoriaDB's capabilities across different use cases and programming languages, organized by language and interface type.
 
-> **📦 All Python examples use the centralized VittoriaDB Python library** for consistent API usage and better maintainability.
+> **📦 All Python examples use the centralized VittoriaDB Python library** located in `../sdk/python/` for consistent API usage and better maintainability.
 
-## 🐍 Python Examples
+## 📁 Directory Structure
+
+```
+examples/
+├── python/          # Python client examples
+├── go/             # Go native examples  
+├── curl/           # HTTP API examples with bash/curl
+├── documents/      # Sample documents for testing
+└── README.md       # This file
+```
+
+## 🐍 Python Examples (`python/`)
 
 ### 🤖 RAG (Retrieval-Augmented Generation) Complete Example
-**File:** `rag_complete_example.py`
+**File:** `python/rag_complete_example.py`
 
 A comprehensive RAG system implementation showing:
 - Document ingestion and processing
@@ -27,10 +38,10 @@ pip install sentence-transformers numpy
 ./vittoriadb run
 
 # Install Python library in development mode (one-time setup)
-cd python && ./install-dev.sh
+cd sdk/python && ./install-dev.sh
 
 # Run the RAG example (uses centralized Python library)
-python examples/rag_complete_example.py
+python examples/python/rag_complete_example.py
 ```
 
 **Features:**
@@ -46,7 +57,7 @@ python examples/rag_complete_example.py
 ---
 
 ### 📄 Document Processing Example
-**File:** `document_processing_example.py`
+**File:** `python/document_processing_example.py`
 
 Demonstrates VittoriaDB's document processing capabilities:
 - Processing various formats (TXT, MD, HTML, PDF, DOCX)
@@ -65,7 +76,7 @@ pip install numpy
 ./vittoriadb run
 
 # Run the document processing example (uses centralized Python library)
-python examples/document_processing_example.py
+python examples/python/document_processing_example.py
 ```
 
 **Features:**
@@ -79,7 +90,7 @@ python examples/document_processing_example.py
 ---
 
 ### 📊 Performance Benchmark
-**File:** `performance_benchmark.py`
+**File:** `python/performance_benchmark.py`
 
 Comprehensive performance testing suite:
 - Insert performance (individual vs batch)
@@ -98,7 +109,7 @@ pip install numpy psutil
 ./vittoriadb run
 
 # Run benchmarks (uses centralized Python library)
-python examples/performance_benchmark.py
+python examples/python/performance_benchmark.py
 ```
 
 **Features:**
@@ -112,7 +123,7 @@ python examples/performance_benchmark.py
 ---
 
 ### 🔍 Basic Usage Example
-**File:** `basic_usage.py`
+**File:** `python/basic_usage.py`
 
 Simple introduction to VittoriaDB centralized Python library:
 - Connection management with auto-retry
@@ -132,7 +143,7 @@ pip install numpy
 ./vittoriadb run
 
 # Run basic usage example (uses centralized Python library)
-python examples/basic_usage.py
+python examples/python/basic_usage.py
 ```
 
 **Features:**
@@ -146,7 +157,7 @@ python examples/basic_usage.py
 ---
 
 ### 🏗️ RAG Application Example
-**File:** `rag_example.py`
+**File:** `python/rag_example.py`
 
 Advanced RAG application using centralized Python library:
 - Document chunking strategies
@@ -165,7 +176,7 @@ pip install sentence-transformers numpy
 ./vittoriadb run
 
 # Run RAG application example (uses centralized Python library)
-python examples/rag_example.py
+python examples/python/rag_example.py
 ```
 
 **Features:**
@@ -176,10 +187,64 @@ python examples/rag_example.py
 - ✅ Interactive query system
 - ✅ Graceful error handling and connection management
 
-## 🔧 Go Examples
+## 🔧 Go Examples (`go/`)
+
+### 🚀 Basic Usage Example
+**File:** `go/basic_usage.go`
+
+Complete HTTP client implementation in Go:
+- VittoriaDB HTTP client with connection management
+- Collection creation and management
+- Individual and batch vector operations
+- Similarity search with metadata filtering
+- Performance comparison and benchmarking
+- Error handling and cleanup
+
+**Usage:**
+```bash
+cd examples/go
+go run basic_usage.go
+```
+
+**Features:**
+- ✅ Complete HTTP API client implementation
+- ✅ Connection testing and health checks
+- ✅ Individual and batch vector operations
+- ✅ Filtered search with metadata
+- ✅ Performance benchmarking
+- ✅ Comprehensive error handling
+
+---
+
+### 🤖 RAG System Example
+**File:** `go/rag_example.go`
+
+Complete RAG system implementation in Go:
+- Knowledge base creation and management
+- Document chunking and processing
+- Text embedding generation (simplified for demo)
+- Semantic search and retrieval
+- Answer generation from context
+- Interactive Q&A system
+
+**Usage:**
+```bash
+cd examples/go
+go run rag_example.go
+```
+
+**Features:**
+- ✅ End-to-end RAG system implementation
+- ✅ Document chunking strategies
+- ✅ Simplified embedding generation
+- ✅ Context-aware answer generation
+- ✅ Interactive query system
+- ✅ Performance analysis and optimization
+
+---
 
 ### 🧪 Simple Index Demo
-**File:** `simple_demo.go`
+**File:** `go/simple_demo.go`
 
 Direct usage of VittoriaDB indexing components:
 - Flat index operations
@@ -189,7 +254,7 @@ Direct usage of VittoriaDB indexing components:
 
 **Usage:**
 ```bash
-cd examples
+cd examples/go
 go run simple_demo.go
 ```
 
@@ -202,7 +267,7 @@ go run simple_demo.go
 ---
 
 ### 🔬 Advanced Features Test
-**File:** `test_advanced_features.go`
+**File:** `go/test_advanced_features.go`
 
 Advanced VittoriaDB functionality testing:
 - Complex vector operations
@@ -212,14 +277,14 @@ Advanced VittoriaDB functionality testing:
 
 **Usage:**
 ```bash
-cd examples
+cd examples/go
 go run test_advanced_features.go
 ```
 
 ---
 
 ### 🧪 Simple Test
-**File:** `simple_test.go`
+**File:** `go/simple_test.go`
 
 Basic functionality testing:
 - Core operations validation
@@ -228,8 +293,107 @@ Basic functionality testing:
 
 **Usage:**
 ```bash
-cd examples
+cd examples/go
 go run simple_test.go
+```
+
+## 🌐 HTTP API Examples (`curl/`)
+
+### 🚀 Basic Usage with cURL
+**File:** `curl/basic_usage.sh`
+
+Complete HTTP API demonstration using bash and cURL:
+- Connection testing and health checks
+- Collection creation and management
+- Individual and batch vector operations
+- Similarity search with filtering
+- Performance comparison and analysis
+- Comprehensive error handling
+
+**Usage:**
+```bash
+cd examples/curl
+chmod +x basic_usage.sh
+./basic_usage.sh
+```
+
+**Features:**
+- ✅ Complete HTTP API workflow
+- ✅ Colored output and progress indicators
+- ✅ JSON validation and pretty printing
+- ✅ Performance timing and metrics
+- ✅ Automatic cleanup and error handling
+- ✅ Cross-platform bash compatibility
+
+---
+
+### 📊 Volume Testing
+**File:** `curl/volume_test.sh`
+
+Comprehensive performance testing with different data volumes:
+- **KB-scale testing:** Small vectors (32D, 100 vectors)
+- **MB-scale testing:** Medium vectors (256D, 1K vectors)  
+- **GB-scale testing:** Large vectors (512D, 5K vectors)
+- Index type comparison (Flat vs HNSW)
+- Memory usage monitoring and analysis
+- Performance benchmarking across scales
+
+**Usage:**
+```bash
+cd examples/curl
+chmod +x volume_test.sh
+./volume_test.sh
+```
+
+**Features:**
+- ✅ Multi-scale performance testing
+- ✅ Index type optimization analysis
+- ✅ Memory usage tracking
+- ✅ HNSW parameter tuning
+- ✅ Stress testing and resource monitoring
+- ✅ Detailed performance reports
+
+---
+
+### 🤖 RAG System with cURL
+**File:** `curl/rag_example.sh`
+
+Complete RAG system implementation using HTTP API:
+- Knowledge base creation and document ingestion
+- Text embedding generation (simplified for demo)
+- Semantic search and information retrieval
+- Context-aware answer generation
+- Interactive Q&A system
+- Performance analysis and optimization
+
+**Usage:**
+```bash
+cd examples/curl
+chmod +x rag_example.sh
+./rag_example.sh
+```
+
+**Features:**
+- ✅ End-to-end RAG system via HTTP API
+- ✅ Document chunking and processing
+- ✅ Category-based filtering and search
+- ✅ Interactive demo mode
+- ✅ Performance metrics and analysis
+- ✅ Multi-topic knowledge base
+
+**Requirements:**
+- `bash` (4.0+)
+- `curl` (for HTTP requests)
+- `jq` (recommended for JSON processing)
+- `bc` (for mathematical calculations)
+
+**Installation:**
+```bash
+# macOS
+brew install jq bc
+
+# Ubuntu/Debian
+sudo apt-get install jq bc
 ```
 
 ## 📁 Document Samples
@@ -262,10 +426,11 @@ The `documents/` directory contains sample documents for testing:
    ```
 
 2. **Choose an example:**
-   - For RAG applications: `python examples/rag_complete_example.py`
-   - For document processing: `python examples/document_processing_example.py`
-   - For performance testing: `python examples/performance_benchmark.py`
-   - For Go development: `cd examples && go run simple_demo.go`
+   - For RAG applications: `python examples/python/rag_complete_example.py`
+   - For document processing: `python examples/python/document_processing_example.py`
+   - For performance testing: `python examples/python/performance_benchmark.py`
+   - For Go development: `cd examples/go && go run basic_usage.go`
+   - For HTTP API testing: `cd examples/curl && ./basic_usage.sh`
 
 3. **Explore the web dashboard:**
    Open http://localhost:8080 in your browser
@@ -279,7 +444,7 @@ The `documents/` directory contains sample documents for testing:
 
 ### Python Dependencies
 
-> **📦 All Python examples use the centralized VittoriaDB Python library** located in `../python/vittoriadb/`
+> **📦 All Python examples use the centralized VittoriaDB Python library** located in `../sdk/python/vittoriadb/`
 
 ```bash
 # Core dependencies (required for all examples)
@@ -301,10 +466,10 @@ pip install openai
 
 ```bash
 # One-time setup: Install in editable/development mode (recommended)
-cd python && ./install-dev.sh
+cd sdk/python && ./install-dev.sh
 
 # Or manually:
-cd python && pip install -e .
+cd sdk/python && pip install -e .
 
 # Verify installation
 python -c "import vittoriadb; print('✅ VittoriaDB Python library ready!')"
@@ -363,7 +528,7 @@ All Go dependencies are managed via `go.mod` and will be downloaded automaticall
 ```
 ModuleNotFoundError: No module named 'vittoriadb'
 ```
-**Solution:** Install the Python library in development mode: `cd python && ./install-dev.sh`
+**Solution:** Install the Python library in development mode: `cd sdk/python && ./install-dev.sh`
 
 **Dependency Error:**
 ```
