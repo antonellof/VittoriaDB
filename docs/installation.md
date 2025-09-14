@@ -4,7 +4,27 @@ This guide covers all installation methods for VittoriaDB across different platf
 
 ## 📦 Installation Methods
 
-### Option 1: Pre-built Binaries (Recommended)
+### Option 1: Python SDK (PyPI Package)
+
+**🐍 For Python developers - easiest installation:**
+
+```bash
+# Install VittoriaDB Python SDK from PyPI
+pip install vittoriadb
+```
+
+The Python SDK automatically:
+- Downloads the appropriate VittoriaDB binary for your platform
+- Manages server lifecycle (start/stop)
+- Provides a clean Pythonic API
+- Supports all vectorizer configurations
+
+**Links:**
+- **PyPI Package**: https://pypi.org/project/vittoriadb/
+- **SDK Documentation**: [Python SDK README](../sdk/python/README.md)
+- **Examples**: [Python Examples](../examples/python/)
+
+### Option 2: Pre-built Binaries (Server Only)
 
 #### Quick Install Script
 ```bash

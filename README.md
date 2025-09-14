@@ -2,6 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org)
 [![Python Version](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://python.org)
+[![PyPI version](https://badge.fury.io/py/vittoriadb.svg)](https://pypi.org/project/vittoriadb/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
 
@@ -33,6 +34,7 @@
 
 - **[📦 Installation Guide](docs/installation.md)** - Complete installation instructions for all platforms
 - **[🚀 Quick Start](#-quick-start)** - Get started in 30 seconds
+- **[🐍 Python SDK](https://pypi.org/project/vittoriadb/)** - Official Python package on PyPI (`pip install vittoriadb`)
 - **[🤖 Embedding Services](docs/embeddings.md)** - Complete guide to auto_embeddings() and vectorizers
 - **[📖 Usage Examples](#-usage-examples)** - Python, Go, and cURL examples
 - **[🛠️ API Reference](docs/api.md)** - Complete REST API documentation
@@ -58,8 +60,12 @@ chmod +x vittoriadb-v0.2.0-linux-amd64
 ./vittoriadb-v0.2.0-linux-amd64 run
 ```
 
-### Python SDK (Development)
+### Python SDK
 ```bash
+# Install from PyPI (recommended)
+pip install vittoriadb
+
+# Or install from source for development
 git clone https://github.com/antonellof/VittoriaDB.git
 cd VittoriaDB/sdk/python && ./install-dev.sh
 ```
@@ -309,15 +315,27 @@ collection.Insert(ctx, &core.Vector{
 })
 ```
 
-### Python Package Example  
+### Python SDK Example  
 ```python
+# Install: pip install vittoriadb
 import vittoriadb
+from vittoriadb.configure import Configure
 
-# Connect and use
-db = vittoriadb.connect(url="http://localhost:8080")
-collection = db.create_collection("docs", dimensions=384)
-collection.insert("doc1", [0.1] * 384, {"title": "My Document"})
-results = collection.search([0.1] * 384, limit=10)
+# Connect to server
+db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
+
+# Create collection with automatic embeddings
+collection = db.create_collection(
+    name="docs", 
+    dimensions=768,
+    vectorizer_config=Configure.Vectors.auto_embeddings()  # Uses Ollama
+)
+
+# Insert text directly - server generates embeddings
+collection.insert_text("doc1", "Your document content", {"title": "My Document"})
+
+# Search with text - server generates query embedding
+results = collection.search_text("find similar content", limit=10)
 ```
 
 ### RAG Application Example

@@ -28,6 +28,9 @@ Currently, VittoriaDB runs without authentication. Authentication features are p
 | `GET` | `/collections/{name}/vectors/{id}` | Get vector |
 | `DELETE` | `/collections/{name}/vectors/{id}` | Delete vector |
 | `GET` | `/collections/{name}/search` | Search vectors |
+| `POST` | `/collections/{name}/text` | Insert text (auto-vectorized) |
+| `POST` | `/collections/{name}/text/batch` | Batch insert text |
+| `GET,POST` | `/collections/{name}/search/text` | Search with text query |
 | `POST` | `/collections/{name}/upload` | Upload document |
 
 ## 🔧 Server Management
@@ -259,16 +262,293 @@ curl -G http://localhost:8080/collections/documents/search \
 }
 ```
 
-## 📄 Document Upload (Future Feature)
+## 🔤 Text Operations (Auto-Vectorized)
 
+For collections with vectorizer configuration, you can insert and search text directly without manually generating embeddings.
+
+### Insert Single Text
+```bash
+curl -X POST http://localhost:8080/collections/documents/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "text_001",
+    "text": "Artificial intelligence is transforming how we process data through machine learning.",
+    "metadata": {
+      "category": "technology",
+      "source": "article",
+      "date": "2024-01-15"
+    }
+  }'
+```
+
+**Requirements:** Collection must have `vectorizer_config` enabled.
+
+**Response:**
+```json
+{
+  "status": "inserted",
+  "id": "text_001",
+  "embedding_generated": true
+}
+```
+
+### Batch Insert Text
+```bash
+curl -X POST http://localhost:8080/collections/documents/text/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "texts": [
+      {
+        "id": "text_002",
+        "text": "Machine learning algorithms can identify patterns in large datasets.",
+        "metadata": {"category": "AI", "type": "definition"}
+      },
+      {
+        "id": "text_003", 
+        "text": "Vector databases enable efficient similarity search for AI applications.",
+        "metadata": {"category": "database", "type": "explanation"}
+      }
+    ]
+  }'
+```
+
+**Response:**
+```json
+{
+  "status": "batch_inserted",
+  "inserted_count": 2,
+  "failed_count": 0,
+  "processing_time": 1250
+}
+```
+
+### Text Search
+Search using natural language queries (automatically vectorized):
+
+```bash
+# GET method
+curl -G http://localhost:8080/collections/documents/search/text \
+  --data-urlencode 'query=machine learning and artificial intelligence' \
+  --data-urlencode 'limit=5'
+
+# POST method (recommended for complex queries)
+curl -X POST http://localhost:8080/collections/documents/search/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "machine learning and artificial intelligence",
+    "limit": 5,
+    "filter": {"category": "technology"}
+  }'
+```
+
+**Requirements:** Collection must have `vectorizer_config` enabled.
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "id": "text_001",
+      "score": 0.89,
+      "metadata": {
+        "category": "technology",
+        "source": "article"
+      }
+    }
+  ],
+  "query_embedding_generated": true,
+  "took_ms": 45
+}
+```
+
+## 📄 Document Upload
+
+VittoriaDB supports intelligent document processing with automatic vectorization. Upload documents and they are automatically processed, chunked, and vectorized based on your collection's configuration.
+
+### Supported Document Formats
+- **PDF** - Text extraction from PDF documents
+- **DOCX** - Microsoft Word documents
+- **TXT** - Plain text files
+- **MD** - Markdown files (with frontmatter parsing)
+- **HTML** - HTML documents (with tag stripping)
+
+### Upload Document
 ```bash
 curl -X POST http://localhost:8080/collections/documents/upload \
   -F "file=@document.pdf" \
   -F "chunk_size=500" \
-  -F "overlap=50" \
-  -F "embedding_model=sentence-transformers/all-MiniLM-L6-v2" \
-  -F "metadata={\"source\": \"upload\", \"type\": \"pdf\"}"
+  -F "chunk_overlap=50" \
+  -F "language=en" \
+  -F "metadata={\"source\": \"upload\", \"type\": \"pdf\", \"author\": \"user\"}"
 ```
+
+**Parameters:**
+- `file` (required): The document file to upload (max 32MB)
+- `chunk_size` (optional): Size of text chunks in characters (default: 500)
+- `chunk_overlap` (optional): Overlap between chunks in characters (default: 50)
+- `language` (optional): Document language for processing (default: "en")
+- `metadata` (optional): Additional metadata as JSON object
+
+**Response:**
+```json
+{
+  "status": "processed",
+  "document_id": "doc_1694678400123",
+  "document_title": "Research Paper.pdf",
+  "document_type": "pdf",
+  "chunks_created": 15,
+  "chunks_inserted": 15,
+  "processing_time": 2340,
+  "collection": "documents"
+}
+```
+
+### Automatic vs Manual Vectorization
+
+The upload behavior depends on your collection configuration:
+
+#### Collections WITH Vectorizer (Recommended)
+For collections created with `vectorizer_config`, documents are automatically vectorized:
+
+```bash
+# 1. Create collection with vectorizer
+curl -X POST http://localhost:8080/collections \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "smart_documents",
+    "dimensions": 384,
+    "metric": 0,
+    "vectorizer_config": {
+      "type": "sentence_transformers",
+      "model": "all-MiniLM-L6-v2",
+      "dimensions": 384
+    }
+  }'
+
+# 2. Upload document - automatic embedding generation
+curl -X POST http://localhost:8080/collections/smart_documents/upload \
+  -F "file=@research.pdf" \
+  -F "chunk_size=600"
+```
+
+**What happens:**
+1. 📄 Document is processed and chunked
+2. 🤖 Each chunk is automatically vectorized using the collection's vectorizer
+3. 💾 Real embeddings are stored and ready for semantic search
+
+#### Collections WITHOUT Vectorizer (Legacy Mode)
+For collections without `vectorizer_config`, placeholder vectors are created:
+
+```bash
+# 1. Create basic collection (no vectorizer)
+curl -X POST http://localhost:8080/collections \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "basic_documents",
+    "dimensions": 384,
+    "metric": 0
+  }'
+
+# 2. Upload document - placeholder vectors only
+curl -X POST http://localhost:8080/collections/basic_documents/upload \
+  -F "file=@research.pdf"
+```
+
+**What happens:**
+1. 📄 Document is processed and chunked
+2. 🚧 Zero vectors (placeholders) are created for each chunk
+3. 💾 Text content and metadata are preserved, but no semantic search capability
+
+### Available Vectorizer Types
+
+| Type | Model | Dimensions | Requirements |
+|------|-------|------------|--------------|
+| `sentence_transformers` | `all-MiniLM-L6-v2` | 384 | Server-side Python environment |
+| `openai` | `text-embedding-ada-002` | 1536 | OpenAI API key |
+| `huggingface` | Various models | 384+ | HuggingFace API token (optional) |
+| `ollama` | `nomic-embed-text` | 768 | Local Ollama installation |
+
+### Complete Workflow Example
+
+```bash
+#!/bin/bash
+# Complete document upload workflow
+
+# 1. Create collection with automatic embeddings
+echo "Creating collection with vectorizer..."
+curl -X POST http://localhost:8080/collections \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "knowledge_base",
+    "dimensions": 384,
+    "metric": 0,
+    "index_type": 1,
+    "vectorizer_config": {
+      "type": "sentence_transformers",
+      "model": "all-MiniLM-L6-v2",
+      "dimensions": 384
+    }
+  }' | jq
+
+# 2. Upload multiple documents
+echo "Uploading PDF document..."
+curl -X POST http://localhost:8080/collections/knowledge_base/upload \
+  -F "file=@research_paper.pdf" \
+  -F "chunk_size=600" \
+  -F "chunk_overlap=100" \
+  -F "metadata={\"category\": \"research\", \"year\": \"2024\"}" | jq
+
+echo "Uploading Word document..."
+curl -X POST http://localhost:8080/collections/knowledge_base/upload \
+  -F "file=@manual.docx" \
+  -F "chunk_size=400" \
+  -F "metadata={\"category\": \"documentation\"}" | jq
+
+# 3. Search the uploaded content (semantic search)
+echo "Searching uploaded documents..."
+curl -X POST http://localhost:8080/collections/knowledge_base/search/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "machine learning algorithms",
+    "limit": 5
+  }' | jq
+
+# 4. Check collection statistics
+echo "Collection statistics:"
+curl http://localhost:8080/collections/knowledge_base/stats | jq
+```
+
+### Error Handling
+
+| HTTP Code | Error | Description |
+|-----------|-------|-------------|
+| `400` | Bad Request | Invalid file format, missing file, or malformed parameters |
+| `404` | Not Found | Collection does not exist |
+| `413` | Payload Too Large | File exceeds 32MB limit |
+| `415` | Unsupported Media Type | File format not supported |
+| `500` | Internal Server Error | Processing failed or vectorizer error |
+
+**Error Response Example:**
+```json
+{
+  "error": "Unsupported document type",
+  "code": "UNSUPPORTED_FORMAT",
+  "details": {
+    "filename": "document.xyz",
+    "supported_formats": ["pdf", "docx", "txt", "md", "html"]
+  }
+}
+```
+
+### Best Practices
+
+1. **Use Collections with Vectorizers**: Always create collections with `vectorizer_config` for automatic embedding generation
+2. **Optimize Chunk Size**: 
+   - **Small chunks (300-500)**: Better for precise matching
+   - **Large chunks (800-1200)**: Better for context preservation
+3. **Add Meaningful Metadata**: Include source, category, date, author for better filtering
+4. **Monitor Processing Time**: Large documents may take several seconds to process
+5. **Batch Upload**: For multiple documents, upload them sequentially to avoid overwhelming the server
 
 ## 🐍 Python SDK
 

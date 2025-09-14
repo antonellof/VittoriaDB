@@ -9,10 +9,10 @@ This example demonstrates a full RAG pipeline using VittoriaDB:
 4. Context-aware response generation
 
 Requirements:
-    pip install sentence-transformers openai requests
+    pip install vittoriadb sentence-transformers openai requests
     
 Usage:
-    python examples/rag_complete_example.py
+    python 07_rag_complete_workflow.py
 """
 
 import time

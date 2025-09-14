@@ -8,8 +8,8 @@ for document storage and retrieval, combined with embedding models.
 Requirements:
     pip install vittoriadb sentence-transformers
 
-Run:
-    python examples/rag_example.py
+Usage:
+    python 06_rag_basic_example.py
 """
 
 import time

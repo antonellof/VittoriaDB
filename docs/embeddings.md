@@ -17,7 +17,11 @@ Instead of implementing custom embedding algorithms, VittoriaDB delegates text v
 **Local ML models without API dependencies**
 
 ```python
+# Install: pip install vittoriadb
+import vittoriadb
 from vittoriadb.configure import Configure
+
+db = vittoriadb.connect()
 
 # Automatic embeddings using local Ollama models
 collection = db.create_collection(

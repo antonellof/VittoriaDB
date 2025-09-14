@@ -7,15 +7,12 @@ using the Configure.Vectors.auto_embeddings() function. The server handles
 all embedding generation automatically - no client-side model loading required!
 
 Requirements:
+    pip install vittoriadb
     Server must have sentence-transformers installed
 
 Usage:
-    python server_side_embedding_demo.py
+    python 02_server_side_embeddings_basic.py
 """
-
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'python'))
 
 import vittoriadb
 from vittoriadb.configure import Configure

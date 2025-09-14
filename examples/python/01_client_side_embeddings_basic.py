@@ -7,15 +7,11 @@ using the Configure.Vectors.auto_embeddings() function for seamless
 text-to-vector conversion and semantic search.
 
 Requirements:
-    pip install sentence-transformers
-
+    pip install vittoriadb sentence-transformers
+    
 Usage:
-    python automatic_embedding_demo.py
+    python 01_client_side_embeddings_basic.py
 """
-
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'python'))
 
 import vittoriadb
 from vittoriadb.configure import Configure

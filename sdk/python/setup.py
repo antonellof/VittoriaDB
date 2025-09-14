@@ -65,7 +65,7 @@ class PostInstallCommand(install):
 
 # Read README for long description
 def read_readme():
-    readme_path = os.path.join(os.path.dirname(__file__), "..", "README.md")
+    readme_path = os.path.join(os.path.dirname(__file__), "README.md")
     if os.path.exists(readme_path):
         with open(readme_path, "r", encoding="utf-8") as f:
             return f.read()
@@ -85,16 +85,17 @@ def read_version():
 setup(
     name="vittoriadb",
     version=read_version(),
-    description="Simple embedded vector database for local AI development",
+    description="Simple embedded vector database for local AI development with automatic embeddings",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     author="VittoriaDB Team",
     author_email="team@vittoriadb.dev",
-    url="https://github.com/company/vittoriadb",
+    url="https://github.com/antonellof/VittoriaDB",
     project_urls={
-        "Documentation": "https://vittoriadb.dev",
-        "Source": "https://github.com/company/vittoriadb",
+        "Source": "https://github.com/antonellof/VittoriaDB",
         "Tracker": "https://github.com/antonellof/VittoriaDB/issues",
+        "Changelog": "https://github.com/antonellof/VittoriaDB/releases",
+        "Examples": "https://github.com/antonellof/VittoriaDB/tree/main/examples",
     },
     packages=find_packages(),
     install_requires=[

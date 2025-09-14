@@ -9,10 +9,10 @@ This example demonstrates:
 4. Memory and timing measurements
 
 Requirements:
-    pip install numpy requests psutil
+    pip install vittoriadb numpy requests psutil
 
 Usage:
-    python examples/performance_benchmark.py
+    python 09_performance_benchmarks.py
 """
 
 import time

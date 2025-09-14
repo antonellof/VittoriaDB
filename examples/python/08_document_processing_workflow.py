@@ -9,10 +9,10 @@ This example demonstrates how to:
 4. Handle document metadata and chunking
 
 Requirements:
-    pip install requests sentence-transformers
+    pip install vittoriadb requests sentence-transformers
 
 Usage:
-    python examples/document_processing_example.py
+    python 08_document_processing_workflow.py
 """
 
 import os

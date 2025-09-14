@@ -9,9 +9,11 @@ This example demonstrates:
 4. Searching for similar vectors
 5. Managing collections
 
-Run this after installing VittoriaDB:
-    pip install vittoriadb
-    python examples/basic_usage.py
+Requirements:
+    pip install vittoriadb numpy
+
+Usage:
+    python 00_basic_usage_manual_vectors.py
 """
 
 import numpy as np

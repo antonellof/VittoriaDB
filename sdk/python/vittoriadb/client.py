@@ -21,6 +21,7 @@ from .types import (
     DatabaseStats,
     DistanceMetric,
     IndexType,
+    VectorizerConfig,
     VittoriaDBError,
     ConnectionError,
     CollectionError,
@@ -182,7 +183,8 @@ class VittoriaDB:
                          dimensions: int,
                          metric: Union[DistanceMetric, str] = DistanceMetric.COSINE,
                          index_type: Union[IndexType, str] = IndexType.FLAT,
-                         config: Optional[Dict[str, Any]] = None) -> 'Collection':
+                         config: Optional[Dict[str, Any]] = None,
+                         vectorizer_config: Optional[VectorizerConfig] = None) -> 'Collection':
         """Create a new vector collection."""
         # Convert to enum values and then to integers (Go server expects integers)
         if isinstance(metric, DistanceMetric):
@@ -206,6 +208,10 @@ class VittoriaDB:
             "index_type": index_int,
             "config": config or {}
         }
+        
+        # Add vectorizer configuration if provided
+        if vectorizer_config:
+            payload["vectorizer_config"] = vectorizer_config.to_dict()
         
         response = self._make_request("POST", "/collections", json=payload)
         self._handle_response(response)
@@ -382,13 +388,129 @@ class Collection:
         """Get total number of vectors."""
         return self.info.vector_count
     
+    def insert_text(self, 
+                   id: str,
+                   text: str,
+                   metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Insert text that will be automatically vectorized.
+        
+        Requires the collection to have a vectorizer configured.
+        
+        Args:
+            id: Unique identifier for the text
+            text: Text content to vectorize and insert
+            metadata: Optional metadata dictionary
+            
+        Returns:
+            Dictionary with insertion status
+            
+        Raises:
+            CollectionError: If collection doesn't have vectorizer configured
+        """
+        payload = {
+            "id": id,
+            "text": text,
+            "metadata": metadata or {}
+        }
+        
+        try:
+            response = self.client._make_request("POST", f"/collections/{self.name}/text", json=payload)
+            return self.client._handle_response(response)
+        except Exception as e:
+            if "vectorizer" in str(e).lower():
+                raise CollectionError(f"Collection '{self.name}' does not have vectorizer configured. Use create_collection() with vectorizer_config parameter.")
+            raise VectorError(f"Failed to insert text: {e}")
+    
+    def insert_text_batch(self, 
+                         texts: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Insert multiple texts that will be automatically vectorized.
+        
+        Requires the collection to have a vectorizer configured.
+        
+        Args:
+            texts: List of dictionaries with 'id', 'text', and optional 'metadata' keys
+            
+        Returns:
+            Dictionary with batch insertion status
+            
+        Raises:
+            CollectionError: If collection doesn't have vectorizer configured
+        """
+        payload = {"texts": texts}
+        
+        try:
+            response = self.client._make_request("POST", f"/collections/{self.name}/text/batch", json=payload)
+            return self.client._handle_response(response)
+        except Exception as e:
+            if "vectorizer" in str(e).lower():
+                raise CollectionError(f"Collection '{self.name}' does not have vectorizer configured. Use create_collection() with vectorizer_config parameter.")
+            raise VectorError(f"Failed to insert text batch: {e}")
+    
+    def search_text(self, 
+                   query: str,
+                   limit: int = 10,
+                   filter: Optional[Dict[str, Any]] = None,
+                   include_metadata: bool = True) -> List[SearchResult]:
+        """
+        Search using a text query that will be automatically vectorized.
+        
+        Requires the collection to have a vectorizer configured.
+        
+        Args:
+            query: Text query to search for
+            limit: Maximum number of results to return
+            filter: Optional metadata filter
+            include_metadata: Whether to include metadata in results
+            
+        Returns:
+            List of SearchResult objects
+            
+        Raises:
+            CollectionError: If collection doesn't have vectorizer configured
+        """
+        payload = {
+            "query": query,
+            "limit": limit,
+            "include_metadata": include_metadata
+        }
+        
+        if filter:
+            payload["filter"] = filter
+        
+        try:
+            response = self.client._make_request("POST", f"/collections/{self.name}/search/text", json=payload)
+            data = self.client._handle_response(response)
+            
+            return [SearchResult.from_dict(result) for result in data.get("results", [])]
+        except Exception as e:
+            if "vectorizer" in str(e).lower():
+                raise CollectionError(f"Collection '{self.name}' does not have vectorizer configured. Use create_collection() with vectorizer_config parameter.")
+            raise SearchError(f"Failed to search text: {e}")
+    
     def upload_file(self, 
                     file_path: str,
                     chunk_size: int = 500,
-                    overlap: int = 50,
-                    metadata: Optional[Dict[str, Any]] = None,
-                    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2") -> Dict[str, Any]:
-        """Upload and process a document file."""
+                    chunk_overlap: int = 50,
+                    language: str = "en",
+                    metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Upload and process a document file.
+        
+        The document will be processed, chunked, and automatically vectorized
+        if the collection has a vectorizer configured.
+        
+        Args:
+            file_path: Path to the document file
+            chunk_size: Size of text chunks in characters
+            chunk_overlap: Overlap between chunks in characters  
+            language: Document language for processing
+            metadata: Optional metadata dictionary
+            
+        Returns:
+            Dictionary with upload status and processing results
+        """
         if not os.path.exists(file_path):
             raise VectorError(f"File not found: {file_path}")
         
@@ -396,8 +518,8 @@ class Collection:
             files = {'file': f}
             data = {
                 'chunk_size': chunk_size,
-                'overlap': overlap,
-                'embedding_model': embedding_model
+                'chunk_overlap': chunk_overlap,
+                'language': language
             }
             
             if metadata:

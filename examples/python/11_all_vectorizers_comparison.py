@@ -5,8 +5,6 @@ Test all external vectorizer services (clean implementation)
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../python'))
-
 import vittoriadb
 from vittoriadb.configure import Configure
 import time

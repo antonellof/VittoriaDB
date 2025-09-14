@@ -675,38 +675,32 @@ The `documents/` directory contains sample documents for testing:
 
 ### Python Dependencies
 
-> **📦 All Python examples use the centralized VittoriaDB Python library** located in `../sdk/python/vittoriadb/`
+> **📦 All Python examples use the VittoriaDB Python library from PyPI**
 
 ```bash
-# Core dependencies (required for all examples)
-pip install numpy
+# Core library (required for all examples)
+pip install vittoriadb
 
-# For RAG examples with embeddings
-pip install sentence-transformers
-
-# For performance benchmarks
-pip install psutil
-
-# Optional: for advanced RAG features
-pip install openai
+# Additional dependencies for specific examples
+pip install numpy                    # For basic usage and performance examples
+pip install sentence-transformers    # For RAG and embedding examples
+pip install psutil                   # For performance benchmarks
+pip install openai                   # Optional: for OpenAI embedding examples
 ```
 
 ### Library Installation
 
-> **📦 Install VittoriaDB Python library in development mode** for the best experience:
+> **📦 Install VittoriaDB Python library from PyPI** for the best experience:
 
 ```bash
-# One-time setup: Install in editable/development mode (recommended)
-cd sdk/python && ./install-dev.sh
-
-# Or manually:
-cd sdk/python && pip install -e .
+# Install from PyPI (recommended)
+pip install vittoriadb
 
 # Verify installation
 python -c "import vittoriadb; print('✅ VittoriaDB Python library ready!')"
 ```
 
-After installation, all examples use standard imports:
+All examples use standard imports:
 ```python
 import vittoriadb
 
@@ -714,13 +708,13 @@ import vittoriadb
 db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
 ```
 
-**Benefits of editable installation:**
-- ✅ Clean imports without path manipulation
-- ✅ Changes to library code are immediately available
-- ✅ Professional development setup
+**Benefits of PyPI installation:**
+- ✅ Clean, simple installation process
+- ✅ Automatic dependency management
+- ✅ Professional production-ready setup
 - ✅ IDE autocomplete and type hints work properly
 - ✅ Consistent API across all examples
-- ✅ Better error handling and debugging
+- ✅ Regular updates through pip
 
 ### Go Dependencies
 All Go dependencies are managed via `go.mod` and will be downloaded automatically.

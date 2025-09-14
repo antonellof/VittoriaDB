@@ -62,6 +62,70 @@ class IndexType(Enum):
         return string_map.get(self, "flat")
 
 
+class VectorizerType(Enum):
+    """Vectorizer types for automatic embedding generation."""
+    NONE = 0
+    SENTENCE_TRANSFORMERS = 1
+    OPENAI = 2
+    HUGGINGFACE = 3
+    OLLAMA = 4
+    
+    @classmethod
+    def from_string(cls, value: str) -> 'VectorizerType':
+        """Create VectorizerType from string value."""
+        string_map = {
+            "none": cls.NONE,
+            "sentence_transformers": cls.SENTENCE_TRANSFORMERS,
+            "openai": cls.OPENAI,
+            "huggingface": cls.HUGGINGFACE,
+            "ollama": cls.OLLAMA
+        }
+        return string_map.get(value.lower(), cls.NONE)
+    
+    def to_string(self) -> str:
+        """Convert to string representation."""
+        string_map = {
+            self.NONE: "none",
+            self.SENTENCE_TRANSFORMERS: "sentence_transformers",
+            self.OPENAI: "openai",
+            self.HUGGINGFACE: "huggingface",
+            self.OLLAMA: "ollama"
+        }
+        return string_map.get(self, "none")
+
+
+@dataclass
+class VectorizerConfig:
+    """Configuration for automatic vectorization."""
+    type: VectorizerType
+    model: str
+    dimensions: int
+    options: Dict[str, Any]
+    
+    def __post_init__(self):
+        if self.options is None:
+            self.options = {}
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API calls."""
+        return {
+            "type": self.type.value,  # Send integer value, not string
+            "model": self.model,
+            "dimensions": self.dimensions,
+            "options": self.options
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'VectorizerConfig':
+        """Create VectorizerConfig from dictionary."""
+        return cls(
+            type=VectorizerType.from_string(data["type"]),
+            model=data["model"],
+            dimensions=data["dimensions"],
+            options=data.get("options", {})
+        )
+
+
 @dataclass
 class Vector:
     """Represents a vector with metadata."""

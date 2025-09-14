@@ -303,7 +303,7 @@ curl -s http://localhost:8080/stats | jq '.memory_usage'
 After trying these cURL examples, explore:
 
 - **Go Examples:** `../go/` - Native Go client usage
-- **Python Examples:** `../python/` - Python library integration
+- **Python Examples:** `../python/` - Python SDK integration
 - **Document Processing:** Various file format handling
 - **Production Deployment:** Real-world configuration examples
 

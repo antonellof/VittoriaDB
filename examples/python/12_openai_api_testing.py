@@ -5,8 +5,6 @@ Test OpenAI vectorizer with real API key
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../python'))
-
 import vittoriadb
 from vittoriadb.configure import Configure
 import time
