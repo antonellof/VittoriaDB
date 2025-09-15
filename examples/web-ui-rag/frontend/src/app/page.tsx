@@ -86,7 +86,8 @@ import {
   BookOpen,
   Plus,
   MessageSquare,
-  Save
+  Save,
+  ArrowDown
 } from 'lucide-react'
 import { nanoid } from 'nanoid'
 import { useTheme } from 'next-themes'
@@ -195,6 +196,10 @@ export default function Home() {
   // Sidebar collapsible sections
   const [collectionsExpanded, setCollectionsExpanded] = useState(true)
   const [systemStatusExpanded, setSystemStatusExpanded] = useState(true)  // Expanded by default to show session status
+  
+  // Scroll down button state
+  const [showScrollDown, setShowScrollDown] = useState(false)
+
 
   // Create new chat session
   const createNewChatSession = async (title?: string) => {
@@ -251,27 +256,18 @@ export default function Home() {
   }
 
   // Enhanced new chat function
-  const startNewChat = async () => {
-    console.log('🆕 New Chat button clicked!')
-    console.log('Current state:', { 
-      currentSessionId: currentSessionId?.slice(0, 8), 
-      messagesCount: messages.length, 
-      isLoading,
-      status 
-    })
+  const startNewChat = () => {
     
     try {
-      // Force enable the button by clearing loading state first
-      setIsLoading(false)
-      
-      // Save current chat if exists
+      // Save current chat in background (non-blocking)
       if (currentSessionId && messages.length > 0) {
-        console.log('💾 Saving current chat before starting new one...')
-        await saveChatHistory()
+        // Fire and forget - don't wait for completion
+        saveChatHistory().catch(error => {
+          console.error('Background save failed:', error)
+        })
       }
       
-      // Clear current chat and reset to initial state
-      console.log('🧹 Clearing chat state...')
+      // Immediately clear current chat and reset to initial state
       setMessages([])
       setSearchProgress([])
       setError(null)
@@ -282,8 +278,6 @@ export default function Home() {
       
       // Note: New session will be created automatically on first message
       
-      console.log('✅ New chat started - returning to welcome screen')
-      console.log('New state:', { messagesCount: 0, status: 'ready', sessionId: null })
     } catch (error) {
       console.error('❌ Error starting new chat:', error)
       // Make sure we don't leave the UI in a broken state
@@ -512,32 +506,173 @@ export default function Home() {
   // Scroll detection for long responses
   useEffect(() => {
     const handleScroll = () => {
-      const conversationElement = document.querySelector('[data-radix-scroll-area-viewport]')
-      if (conversationElement) {
-        const { scrollTop, scrollHeight, clientHeight } = conversationElement
-        const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
-        setShowScrollButton(!isNearBottom && scrollHeight > clientHeight * 1.2)
+      // Find the viewport container that has fixed height from page layout
+      let conversationElement = null
+      
+      // Look for the main conversation viewport - likely has viewport height constraints
+      const candidates = [
+        // Look for elements with viewport-based heights
+        ...document.querySelectorAll('[class*="h-screen"]'),
+        ...document.querySelectorAll('[class*="h-full"]'),
+        ...document.querySelectorAll('[class*="min-h"]'),
+        // Look for elements with overflow auto that have height constraints
+        ...document.querySelectorAll('div[style*="overflow: auto"]'),
+        // Fallback selectors
+        ...document.querySelectorAll('[data-radix-scroll-area-viewport]')
+      ]
+      
+      // Find the element that actually has scrollable content
+      for (const element of candidates) {
+        const { scrollHeight, clientHeight } = element
+        const computedStyle = window.getComputedStyle(element)
+        
+        // Check if this element has a real height constraint and scrollable content
+        const hasRealHeight = 
+          computedStyle.height !== 'auto' ||
+          element.classList.contains('h-full') ||
+          element.classList.contains('h-screen') ||
+          element.style.height.includes('%') ||
+          element.style.height.includes('vh')
+        
+        const isActuallyScrollable = scrollHeight > clientHeight
+        
+        if (hasRealHeight || isActuallyScrollable) {
+          conversationElement = element
+          break
+        }
       }
+      
+      // Check window scroll instead of element scroll (since that's what we actually scroll)
+      const windowScrollTop = document.documentElement.scrollTop || document.body.scrollTop
+      const windowScrollHeight = document.documentElement.scrollHeight
+      const windowClientHeight = window.innerHeight
+      
+      // Footer compensation - same calculation as scrollToBottom function
+      const footerHeight = 166
+      const bufferSpace = -166
+      const targetScrollPosition = Math.max(0, windowScrollHeight - windowClientHeight - footerHeight - bufferSpace)
+      
+      // Check if window content is scrollable
+      const isWindowScrollable = windowScrollHeight > windowClientHeight
+      
+      // Check if we're at/near the target scroll position (where the scroll button takes us)
+      const distanceFromTarget = Math.abs(windowScrollTop - targetScrollPosition)
+      const isAtTarget = distanceFromTarget < 30 // Within 30px of target position
+      
+      // Show button when window content is scrollable AND we're not at the target position
+      const shouldShowButton = isWindowScrollable && !isAtTarget
+        
+      // Update scroll down button visibility
+      setShowScrollDown(shouldShowButton)
     }
 
-    const conversationElement = document.querySelector('[data-radix-scroll-area-viewport]')
-    if (conversationElement) {
-      conversationElement.addEventListener('scroll', handleScroll)
-      // Check initially and after messages change
-      setTimeout(handleScroll, 100)
+    // Try to find and attach to scroll container
+    const findAndAttachScroll = () => {
+      let element = null
       
-      return () => conversationElement.removeEventListener('scroll', handleScroll)
+      // First try to find the div with inline style "overflow: auto"
+      const allDivs = document.querySelectorAll('div')
+      for (const div of allDivs) {
+        const style = div.getAttribute('style') || ''
+        if (style.includes('overflow: auto') || style.includes('overflow:auto')) {
+          element = div
+          break
+        }
+      }
+      
+      // Fallback to other selectors if not found
+      if (!element) {
+        const selectors = [
+          '[data-radix-scroll-area-viewport]',
+          '.conversation-content',
+          '.h-full.max-w-4xl'
+        ]
+        
+        for (const selector of selectors) {
+          element = document.querySelector(selector)
+          if (element) {
+            break
+          }
+        }
+      }
+      
+      if (element) {
+        element.addEventListener('scroll', handleScroll)
+        // Check initially and frequently for dynamic content
+        setTimeout(handleScroll, 50)
+        setTimeout(handleScroll, 200)
+        setTimeout(handleScroll, 500)
+        setTimeout(handleScroll, 1000)
+        setTimeout(handleScroll, 2000) // Extra checks for streaming content
+        
+        return () => element.removeEventListener('scroll', handleScroll)
+      }
+      
+      return () => {}
+    }
+
+    const cleanup = findAndAttachScroll()
+    
+    // Also listen for window resize to check overflow
+    const handleResize = () => {
+      setTimeout(handleScroll, 100)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    
+    // Add MutationObserver to detect content changes (streaming responses)
+    let observerElement = null
+    
+    // Find the div with overflow: auto for mutation observation
+    const allDivs = document.querySelectorAll('div')
+    for (const div of allDivs) {
+      const style = div.getAttribute('style') || ''
+      if (style.includes('overflow: auto') || style.includes('overflow:auto')) {
+        observerElement = div
+        break
+      }
+    }
+    
+    // Fallback to other elements
+    if (!observerElement) {
+      observerElement = document.querySelector('[data-radix-scroll-area-viewport]') || 
+                       document.querySelector('.conversation-content')
+    }
+    
+    let observer = null
+    if (observerElement) {
+      observer = new MutationObserver(() => {
+        // Content changed, check scroll after a brief delay
+        setTimeout(handleScroll, 100)
+      })
+      
+      observer.observe(observerElement, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      })
+      
+    }
+    
+    return () => {
+      cleanup()
+      window.removeEventListener('resize', handleResize)
+      if (observer) {
+        observer.disconnect()
+      }
     }
   }, [messages])
 
   const scrollToBottom = () => {
-    const conversationElement = document.querySelector('[data-radix-scroll-area-viewport]')
-    if (conversationElement) {
-      conversationElement.scrollTo({
-        top: conversationElement.scrollHeight,
-        behavior: 'smooth'
-      })
-    }
+    // Simple scroll to bottom with fixed pixel offset for footer
+    const footerHeight = 166 // Fixed footer with chat input
+    const bufferSpace = -166  // Extra space above footer
+    const targetScrollTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight - footerHeight - bufferSpace)
+    
+    window.scrollTo({
+      top: targetScrollTop,
+      behavior: 'smooth'
+    })
   }
 
   const handleFileUpload = async (files: File[]) => {
@@ -643,7 +778,6 @@ export default function Home() {
       
       input.onchange = async (e) => {
         const files = Array.from((e.target as HTMLInputElement).files || [])
-        console.log('File input selected:', files.map(f => f.name))
         
         if (files.length > 0) {
           await handleFileUpload(files)
@@ -669,7 +803,6 @@ export default function Home() {
     const hasText = Boolean(message.text)
     const hasAttachments = Boolean(message.files?.length)
 
-    console.log('PromptInput submit:', { hasText, hasAttachments, files: message.files })
 
     if (!(hasText || hasAttachments)) {
       return
@@ -679,7 +812,6 @@ export default function Home() {
     
     // Handle file attachments first
     if (message.files?.length) {
-      console.log('Processing files:', Array.from(message.files).map(f => f.name))
       await handleFileUpload(Array.from(message.files))
       
       // If only files were uploaded (no text), show a message
@@ -734,27 +866,19 @@ export default function Home() {
           <div className="fixed left-0 top-[73px] bottom-0 w-80 bg-card border-r border-border overflow-y-auto z-40">
             {/* Chat Management Section */}
             <div className="p-4 border-b">
-              <div className="space-y-3">
-                <h3 className="font-medium flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  Chat
-                </h3>
-                
-                {/* New Chat Button */}
-                <Button
-                  onClick={() => {
-                    console.log('🔘 New Chat button clicked - handler triggered')
-                    startNewChat()
-                  }}
-                  className="w-full flex items-center gap-2"
-                  variant="outline"
-                  size="sm"
-                  disabled={false}  // Always enabled for new chat
-                >
-                  <Plus className="h-4 w-4" />
-                  New Chat
-                </Button>
-              </div>
+              {/* New Chat Button */}
+              <Button
+                onClick={() => {
+                  startNewChat()
+                }}
+                className="w-full flex items-center gap-2"
+                variant="outline"
+                size="sm"
+                disabled={false}  // Always enabled for new chat
+              >
+                <Plus className="h-4 w-4" />
+                New Chat
+              </Button>
             </div>
             
             {/* Collection Stats */}
@@ -1139,6 +1263,25 @@ export default function Home() {
                   )}
                 </ConversationContent>
                 <ConversationScrollButton />
+                
+                {/* Central Scroll Down Button - Positioned above footer, centered in main area */}
+                {showScrollDown && (
+                  <div className={cn(
+                    "fixed bottom-44 z-50 pointer-events-auto transition-all duration-300",
+                    sidebarOpen 
+                      ? "left-1/2 ml-40 transform -translate-x-1/2" // Center of main area when sidebar open
+                      : "left-1/2 transform -translate-x-1/2" // Center of full page when sidebar closed
+                  )}>
+                    <Button
+                      onClick={scrollToBottom}
+                      size="sm"
+                      className="rounded-full w-10 h-10 p-0 shadow-lg bg-white hover:bg-gray-100 backdrop-blur-sm border border-gray-200 transition-all duration-200 hover:scale-105"
+                    >
+                      <ArrowDown className="h-4 w-4 text-gray-700" />
+                    </Button>
+                  </div>
+                )}
+
                 
                 {/* Custom Scroll Down Button */}
                 {showScrollButton && (
