@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # VittoriaDB RAG Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
+      - VITTORIADB_URL=http://localhost:8080
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - PORT=8501
+      - HOST=0.0.0.0
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data  # Persist VittoriaDB data
+      - ./uploads:/app/uploads  # File uploads
+    networks:
+      - vittoriadb-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8501
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8501
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
+    depends_on:
+      - backend
+    networks:
+      - vittoriadb-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: Ollama service (uncomment to run Ollama in Docker)
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks:
+  #     - vittoriadb-network
+  #   restart: unless-stopped
+  #   environment:
+  #     - OLLAMA_HOST=0.0.0.0
+  #   # Uncomment for GPU support
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: 1
+  #   #           capabilities: [gpu]
+
+networks:
+  vittoriadb-network:
+    driver: bridge
+
+volumes:
+  ollama_data:
+    driver: local
