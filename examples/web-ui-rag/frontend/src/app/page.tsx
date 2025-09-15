@@ -78,10 +78,14 @@ import {
   Brain,
   ChevronDown,
   ChevronDownIcon,
+  ChevronRight,
   Search,
   SearchIcon,
   ExternalLink,
-  BookOpen
+  BookOpen,
+  Plus,
+  MessageSquare,
+  Save
 } from 'lucide-react'
 import { nanoid } from 'nanoid'
 import { useTheme } from 'next-themes'
@@ -181,6 +185,86 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [searchProgress, setSearchProgress] = useState<string[]>([])
+  
+  // Chat session management
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [chatSessions, setChatSessions] = useState<any[]>([])
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
+  
+  // Sidebar collapsible sections
+  const [collectionsExpanded, setCollectionsExpanded] = useState(true)
+  const [systemStatusExpanded, setSystemStatusExpanded] = useState(false)
+
+  // Create new chat session
+  const createNewChatSession = async (title?: string) => {
+    try {
+      const response = await fetch('http://localhost:8501/chat/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title || `Chat ${new Date().toLocaleString()}`
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setCurrentSessionId(data.session.session_id)
+        console.log('New chat session created:', data.session.session_id)
+        return data.session.session_id
+      }
+    } catch (error) {
+      console.error('Failed to create chat session:', error)
+    }
+    return null
+  }
+
+  // Save current chat to VittoriaDB
+  const saveChatHistory = async () => {
+    if (!currentSessionId || messages.length === 0 || !autoSaveEnabled) return
+    
+    try {
+      // Convert messages to the format expected by the backend
+      const chatMessages = messages.map(msg => ({
+        role: msg.from === 'user' ? 'user' : 'assistant',
+        content: msg.versions[0]?.content || '',
+        timestamp: Date.now() / 1000,
+        sources: msg.sources || []
+      }))
+      
+      const response = await fetch('http://localhost:8501/chat/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: currentSessionId,
+          messages: chatMessages
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Chat history saved:', data.messages_saved, 'messages')
+      }
+    } catch (error) {
+      console.error('Failed to save chat history:', error)
+    }
+  }
+
+  // Enhanced new chat function
+  const startNewChat = async () => {
+    // Save current chat if exists
+    if (currentSessionId && messages.length > 0) {
+      await saveChatHistory()
+    }
+    
+    // Clear current chat
+    setMessages([])
+    setSearchProgress([])
+    setError(null)
+    setIsLoading(false)
+    
+    // Create new session
+    await createNewChatSession()
+  }
 
   // Send message directly to backend using new RAG streaming endpoint
   const sendMessage = async (userMessage: string, options: { webSearch?: boolean } = {}) => {
@@ -188,6 +272,14 @@ export default function Home() {
       setIsLoading(true)
       setError(null)
       setSearchProgress([])
+      
+      // Create session if this is the first message
+      if (!currentSessionId) {
+        const sessionId = await createNewChatSession(`Chat: ${userMessage.slice(0, 30)}...`)
+        if (!sessionId) {
+          throw new Error('Failed to create chat session')
+        }
+      }
       
       // Add user message
       const userMsg: MessageType = {
@@ -332,13 +424,20 @@ export default function Home() {
                 })
               } else if (data.type === 'done') {
                 // Mark as complete
-                setMessages(prev => 
-                  prev.map(msg => 
+                setMessages(prev => {
+                  const updatedMessages = prev.map(msg => 
                     msg.key === assistantMsg.key 
                       ? { ...msg, isContentComplete: true, isReasoningComplete: true }
                       : msg
                   )
-                )
+                  
+                  // Auto-save chat history when conversation completes
+                  if (autoSaveEnabled && currentSessionId) {
+                    setTimeout(() => saveChatHistory(), 1000) // Save after 1 second delay
+                  }
+                  
+                  return updatedMessages
+                })
                 setSearchProgress([])
               }
             } catch (parseError) {
@@ -596,6 +695,11 @@ export default function Home() {
                 <h1 className="font-semibold">Your Personal Assistant</h1>
                 <p className="text-xs text-muted-foreground">
                   Powered by VittoriaDB • Connected to your knowledge base
+                  {currentSessionId && (
+                    <span className="ml-2 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xs">
+                      Session Active {autoSaveEnabled ? '• Auto-save ON' : ''}
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -608,15 +712,87 @@ export default function Home() {
         {/* Fixed Sidebar */}
         {sidebarOpen && (
           <div className="fixed left-0 top-[73px] bottom-0 w-80 bg-card border-r border-border overflow-y-auto z-40">
+            {/* Chat Management Section */}
+            <div className="p-4 border-b">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Chat
+                  </h3>
+                  {currentSessionId && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <span>Active</span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* New Chat Button */}
+                <Button
+                  onClick={startNewChat}
+                  className="w-full flex items-center gap-2"
+                  variant="outline"
+                  size="sm"
+                  disabled={isLoading}
+                >
+                  <Plus className="h-4 w-4" />
+                  New Chat
+                </Button>
+                
+                {/* Session Info */}
+                {currentSessionId && (
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Current Session</span>
+                      {autoSaveEnabled && (
+                        <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                          <Save className="h-3 w-3" />
+                          <span>Auto-save</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      ID: {currentSessionId.slice(0, 8)}...
+                    </div>
+                    <Button
+                      onClick={saveChatHistory}
+                      variant="ghost"
+                      size="sm"
+                      className="w-full mt-2 h-7 text-xs"
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      Save Now
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+            
             {/* Collection Stats */}
             <div className="p-4 space-y-4">
               <div>
-                <h3 className="font-medium flex items-center gap-2 mb-3">
-                  <Database className="h-4 w-4" />
-                  Collections
-                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCollectionsExpanded(!collectionsExpanded)}
+                  className="w-full justify-start p-2 h-auto mb-3"
+                >
+                  <div className="flex items-center gap-2 w-full">
+                    {collectionsExpanded ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                    <Database className="h-4 w-4" />
+                    <span className="text-sm font-medium">Collections</span>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground ml-auto">
+                      <span>Auto-sync</span>
+                    </div>
+                  </div>
+                </Button>
                 
-                {stats?.collections ? (
+                {collectionsExpanded && stats?.collections ? (
                   <div className="space-y-2">
                     {Object.entries(stats.collections).map(([name, collection]) => (
                       <div key={name} className="bg-muted/50 rounded-lg p-3">
@@ -643,12 +819,25 @@ export default function Home() {
 
               {/* System Info */}
               <div>
-                <h3 className="font-medium flex items-center gap-2 mb-3">
-                  <Activity className="h-4 w-4" />
-                  System Status
-                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSystemStatusExpanded(!systemStatusExpanded)}
+                  className="w-full justify-start p-2 h-auto mb-3"
+                >
+                  <div className="flex items-center gap-2">
+                    {systemStatusExpanded ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                    <Activity className="h-4 w-4" />
+                    <span className="text-sm font-medium">System Status</span>
+                  </div>
+                </Button>
                 
-                <div className="space-y-2 text-sm">
+                {systemStatusExpanded && (
+                  <div className="space-y-2 text-sm pl-2">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Vectors:</span>
                     <span>{stats?.total_vectors || 0}</span>
@@ -671,7 +860,8 @@ export default function Home() {
                       {health?.vittoriadb_connected ? "Connected" : "Disconnected"}
                     </span>
                   </div>
-                </div>
+                  </div>
+                )}
               </div>
 
               {/* Settings Button in Sidebar */}

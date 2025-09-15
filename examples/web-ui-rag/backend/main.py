@@ -1031,6 +1031,235 @@ async def websocket_notifications(websocket: WebSocket):
     finally:
         notification_service.disconnect_websocket(websocket)
 
+# Chat Session Management Endpoints
+@app.post("/chat/sessions", response_model=ChatSessionResponse)
+async def create_chat_session(request: ChatSessionCreateRequest):
+    """Create a new chat session"""
+    try:
+        import uuid
+        session_id = str(uuid.uuid4())
+        
+        # Generate title from first message or use default
+        title = request.title or f"Chat Session {time.strftime('%Y-%m-%d %H:%M')}"
+        
+        session = ChatSession(
+            session_id=session_id,
+            title=title,
+            created_at=time.time(),
+            updated_at=time.time(),
+            message_count=0,
+            last_message_preview=""
+        )
+        
+        # Store session metadata in VittoriaDB
+        await rag_system.add_document(
+            content=f"Chat Session: {title}",
+            metadata={
+                'type': 'chat_session',
+                'session_id': session_id,
+                'title': title,
+                'created_at': session.created_at,
+                'message_count': 0
+            },
+            collection_name='chat_history'
+        )
+        
+        logger.info("Chat session created", session_id=session_id, title=title)
+        
+        return ChatSessionResponse(
+            session=session,
+            success=True,
+            message=f"Chat session '{title}' created successfully"
+        )
+        
+    except Exception as e:
+        logger.error("Failed to create chat session", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to create chat session: {str(e)}")
+
+@app.get("/chat/sessions", response_model=List[ChatSession])
+async def list_chat_sessions():
+    """List all chat sessions"""
+    try:
+        # Search for chat sessions in VittoriaDB
+        search_results = await rag_system.search_knowledge_base(
+            query="chat session",
+            collections=['chat_history'],
+            limit=100,
+            min_score=0.1
+        )
+        
+        sessions = []
+        for result in search_results:
+            if result.metadata.get('type') == 'chat_session':
+                session = ChatSession(
+                    session_id=result.metadata.get('session_id', ''),
+                    title=result.metadata.get('title', 'Unknown Session'),
+                    created_at=result.metadata.get('created_at', time.time()),
+                    updated_at=result.metadata.get('updated_at', time.time()),
+                    message_count=result.metadata.get('message_count', 0),
+                    last_message_preview=result.metadata.get('last_message_preview', '')
+                )
+                sessions.append(session)
+        
+        # Sort by updated_at descending
+        sessions.sort(key=lambda x: x.updated_at, reverse=True)
+        
+        return sessions
+        
+    except Exception as e:
+        logger.error("Failed to list chat sessions", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to list chat sessions: {str(e)}")
+
+@app.post("/chat/save", response_model=SaveChatResponse)
+async def save_chat_history(request: SaveChatRequest):
+    """Save chat messages to a session"""
+    try:
+        logger.info("Saving chat history", session_id=request.session_id, messages_count=len(request.messages))
+        
+        # Save each message as a separate document
+        saved_count = 0
+        last_message_preview = ""
+        
+        for i, message in enumerate(request.messages):
+            message_id = f"{request.session_id}_msg_{i}_{int(time.time())}"
+            
+            # Create content for the message
+            content = f"""
+Session: {request.session_id}
+Role: {message.role}
+Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(message.timestamp))}
+
+Message:
+{message.content}
+"""
+            
+            # Prepare metadata
+            metadata = {
+                'type': 'chat_message',
+                'session_id': request.session_id,
+                'role': message.role,
+                'timestamp': message.timestamp,
+                'message_index': i,
+                'content': message.content,
+                'sources_count': len(message.sources) if message.sources else 0
+            }
+            
+            # Add sources information if available
+            if message.sources:
+                metadata['sources'] = [
+                    {
+                        'content': source.content[:200] + "..." if len(source.content) > 200 else source.content,
+                        'score': source.score,
+                        'source': source.source,
+                        'metadata': source.metadata
+                    }
+                    for source in message.sources
+                ]
+            
+            # Store in VittoriaDB
+            await rag_system.add_document(
+                content=content,
+                metadata=metadata,
+                collection_name='chat_history'
+            )
+            
+            saved_count += 1
+            
+            # Update last message preview
+            if message.role == 'user':
+                last_message_preview = message.content[:100] + "..." if len(message.content) > 100 else message.content
+        
+        # Update session metadata
+        session_metadata_content = f"Chat Session {request.session_id} - {saved_count} messages"
+        await rag_system.add_document(
+            content=session_metadata_content,
+            metadata={
+                'type': 'chat_session_update',
+                'session_id': request.session_id,
+                'message_count': saved_count,
+                'last_message_preview': last_message_preview,
+                'updated_at': time.time()
+            },
+            collection_name='chat_history'
+        )
+        
+        logger.info("Chat history saved", session_id=request.session_id, saved_count=saved_count)
+        
+        return SaveChatResponse(
+            success=True,
+            message=f"Saved {saved_count} messages to session {request.session_id}",
+            session_id=request.session_id,
+            messages_saved=saved_count
+        )
+        
+    except Exception as e:
+        logger.error("Failed to save chat history", session_id=request.session_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to save chat history: {str(e)}")
+
+@app.get("/chat/sessions/{session_id}/history", response_model=ChatHistoryResponse)
+async def get_chat_history(session_id: str, limit: int = 50, offset: int = 0):
+    """Get chat history for a specific session"""
+    try:
+        # Search for messages in this session
+        search_results = await rag_system.search_knowledge_base(
+            query=f"session {session_id}",
+            collections=['chat_history'],
+            limit=limit + offset + 10,  # Get extra to account for filtering
+            min_score=0.1
+        )
+        
+        # Filter and sort messages
+        messages = []
+        session_info = None
+        
+        for result in search_results:
+            if result.metadata.get('session_id') == session_id:
+                if result.metadata.get('type') == 'chat_message':
+                    # Reconstruct ChatMessage
+                    message = ChatMessage(
+                        role=result.metadata.get('role', 'user'),
+                        content=result.metadata.get('content', ''),
+                        timestamp=result.metadata.get('timestamp', time.time()),
+                        sources=[]  # Sources can be reconstructed if needed
+                    )
+                    messages.append((result.metadata.get('message_index', 0), message))
+                
+                elif result.metadata.get('type') == 'chat_session' and session_info is None:
+                    # Get session info
+                    session_info = ChatSession(
+                        session_id=session_id,
+                        title=result.metadata.get('title', 'Unknown Session'),
+                        created_at=result.metadata.get('created_at', time.time()),
+                        updated_at=result.metadata.get('updated_at', time.time()),
+                        message_count=result.metadata.get('message_count', 0),
+                        last_message_preview=result.metadata.get('last_message_preview', '')
+                    )
+        
+        # Sort messages by index and apply pagination
+        messages.sort(key=lambda x: x[0])
+        sorted_messages = [msg[1] for msg in messages[offset:offset+limit]]
+        
+        if session_info is None:
+            session_info = ChatSession(
+                session_id=session_id,
+                title=f"Session {session_id[:8]}",
+                created_at=time.time(),
+                updated_at=time.time(),
+                message_count=len(messages),
+                last_message_preview=""
+            )
+        
+        return ChatHistoryResponse(
+            session_id=session_id,
+            messages=sorted_messages,
+            total_messages=len(messages),
+            session_info=session_info
+        )
+        
+    except Exception as e:
+        logger.error("Failed to get chat history", session_id=session_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get chat history: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     

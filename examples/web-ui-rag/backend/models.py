@@ -169,3 +169,47 @@ class ConfigResponse(BaseModel):
     current_model: str
     search_limit: int
     vittoriadb_url: str
+
+class ChatSession(BaseModel):
+    """Chat session information"""
+    session_id: str
+    title: str
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+    message_count: int = 0
+    last_message_preview: str = ""
+
+class ChatSessionCreateRequest(BaseModel):
+    """Request to create a new chat session"""
+    title: Optional[str] = None
+
+class ChatSessionResponse(BaseModel):
+    """Chat session response"""
+    session: ChatSession
+    success: bool
+    message: str
+
+class ChatHistoryRequest(BaseModel):
+    """Request to get chat history for a session"""
+    session_id: str
+    limit: int = 50
+    offset: int = 0
+
+class ChatHistoryResponse(BaseModel):
+    """Chat history response"""
+    session_id: str
+    messages: List[ChatMessage]
+    total_messages: int
+    session_info: ChatSession
+
+class SaveChatRequest(BaseModel):
+    """Request to save chat messages"""
+    session_id: str
+    messages: List[ChatMessage]
+
+class SaveChatResponse(BaseModel):
+    """Save chat response"""
+    success: bool
+    message: str
+    session_id: str
+    messages_saved: int

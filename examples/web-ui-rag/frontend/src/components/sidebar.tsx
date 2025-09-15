@@ -12,7 +12,12 @@ import {
   Settings,
   Info,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Plus,
+  MessageSquare,
+  Save,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react'
 import { useStatsStore } from '@/store'
 import { SettingsPanel } from '@/components/settings-panel'
@@ -21,10 +26,16 @@ import { cn } from '@/lib/utils'
 interface SidebarProps {
   isOpen: boolean
   onToggle: () => void
+  onNewChat?: () => void
+  currentSessionId?: string | null
+  autoSaveEnabled?: boolean
+  onSaveChatHistory?: () => void
 }
 
-export function Sidebar({ isOpen, onToggle }: SidebarProps) {
+export function Sidebar({ isOpen, onToggle, onNewChat, currentSessionId, autoSaveEnabled, onSaveChatHistory }: SidebarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [collectionsExpanded, setCollectionsExpanded] = useState(true)
+  const [systemStatusExpanded, setSystemStatusExpanded] = useState(false)
   const { stats, health, isLoading, updatingCollections } = useStatsStore()
 
   // No manual refresh needed - WebSocket handles all updates automatically
@@ -59,6 +70,64 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
         </div>
       </div>
 
+      {/* Chat Management Section */}
+      <div className="p-4 border-b">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" />
+              Chat
+            </h3>
+            {currentSessionId && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span>Active</span>
+              </div>
+            )}
+          </div>
+          
+          {/* New Chat Button */}
+          <Button
+            onClick={onNewChat}
+            className="w-full flex items-center gap-2"
+            variant="outline"
+            size="sm"
+          >
+            <Plus className="h-4 w-4" />
+            New Chat
+          </Button>
+          
+          {/* Session Info */}
+          {currentSessionId && (
+            <div className="bg-muted/50 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Current Session</span>
+                {autoSaveEnabled && (
+                  <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                    <Save className="h-3 w-3" />
+                    <span>Auto-save</span>
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                ID: {currentSessionId.slice(0, 8)}...
+              </div>
+              {onSaveChatHistory && (
+                <Button
+                  onClick={onSaveChatHistory}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-2 h-7 text-xs"
+                >
+                  <Save className="h-3 w-3 mr-1" />
+                  Save Now
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Quick Info */}
       <div className="p-4">
         <div className="bg-gradient-to-r from-blue-500/10 to-purple-600/10 rounded-lg p-3 border">
@@ -81,18 +150,28 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
       <ScrollArea className="flex-1">
         <div className="p-4">
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-medium flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCollectionsExpanded(!collectionsExpanded)}
+              className="w-full justify-start p-2 h-auto"
+            >
+              <div className="flex items-center gap-2 w-full">
+                {collectionsExpanded ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
                 <Database className="h-4 w-4" />
-                Collections
-              </h3>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                {isLoading && <RefreshCw className="h-3 w-3 animate-spin" />}
-                <span>Auto-sync</span>
+                <span className="text-sm font-medium">Collections</span>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground ml-auto">
+                  {isLoading && <RefreshCw className="h-3 w-3 animate-spin" />}
+                  <span>Auto-sync</span>
+                </div>
               </div>
-            </div>
+            </Button>
             
-            {stats?.collections ? (
+            {collectionsExpanded && stats?.collections ? (
               <div className="space-y-3">
                 {Object.entries(stats.collections).map(([name, collection]) => (
                   <div key={name} className="bg-muted/50 rounded-lg p-3">
@@ -124,12 +203,25 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
 
           {/* System Info */}
           <div className="space-y-3">
-            <h3 className="font-medium flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              System
-            </h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSystemStatusExpanded(!systemStatusExpanded)}
+              className="w-full justify-start p-2 h-auto"
+            >
+              <div className="flex items-center gap-2">
+                {systemStatusExpanded ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                <Activity className="h-4 w-4" />
+                <span className="text-sm font-medium">System Status</span>
+              </div>
+            </Button>
             
-            <div className="space-y-2 text-sm">
+            {systemStatusExpanded && (
+              <div className="space-y-2 text-sm pl-2">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Vectors:</span>
                 <span>{stats?.total_vectors || 0}</span>
@@ -143,7 +235,8 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
                   {health?.openai_configured ? "Configured" : "Not configured"}
                 </span>
               </div>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </ScrollArea>
