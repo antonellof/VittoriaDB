@@ -341,7 +341,7 @@ class VittoriaRAGEngine:
     async def search(self, 
                     query: str, 
                     limit: int = 5, 
-                    min_score: float = 0.1,
+                    min_score: float = 0.3,
                     filters: Dict[str, Any] = None) -> List[RetrievalResult]:
         """
         Perform semantic search across multiple collections (knowledge base + web search).
@@ -462,7 +462,30 @@ class VittoriaRAGEngine:
             Generated response
         """
         if not self.openai_client:
-            return "OpenAI client not configured. Cannot generate response."
+            # Fallback to a simple response using the search results
+            if not search_results:
+                return "I don't have enough information in my knowledge base to answer your question. OpenAI API is not available."
+            
+            # Generate a simple response from search results
+            context_info = []
+            for result in search_results[:3]:  # Use top 3 results
+                source_collection = result.chunk.metadata.get('source_collection', 'unknown')
+                if source_collection == 'web_search':
+                    source_type = "🌐 Web Search"
+                elif source_collection == 'documents':
+                    source_type = "📄 Document"
+                else:
+                    source_type = "📚 Knowledge Base"
+                
+                context_info.append(f"{source_type}: {result.chunk.document_title}\nContent: {result.chunk.content[:200]}...\nRelevance Score: {result.score:.3f}")
+            
+            fallback_response = f"""Based on the search results I found, here's what I can tell you:
+
+{chr(10).join(context_info)}
+
+Note: OpenAI API is currently unavailable (quota exceeded), so I'm providing the raw search results. The search found {len(search_results)} relevant sources with scores ranging from {min(r.score for r in search_results):.3f} to {max(r.score for r in search_results):.3f}."""
+            
+            return fallback_response
         
         if not search_results:
             return "I don't have enough information in my knowledge base to answer your question."
@@ -574,7 +597,7 @@ class VittoriaRAGEngine:
     async def rag_query(self, 
                        query: str, 
                        search_limit: int = 5,
-                       min_score: float = 0.1,
+                       min_score: float = 0.3,
                        model: str = "gpt-4") -> RAGResponse:
         """
         Perform complete RAG query: retrieve + generate.
@@ -627,7 +650,7 @@ class VittoriaRAGEngine:
     async def stream_rag_response(self, 
                                  query: str,
                                  search_limit: int = 5,
-                                 min_score: float = 0.1,
+                                 min_score: float = 0.3,
                                  model: str = "gpt-4") -> AsyncGenerator[Dict[str, Any], None]:
         """
         Stream RAG response following proper RAG pattern: Search FIRST, then generate with context.
@@ -644,7 +667,59 @@ class VittoriaRAGEngine:
         if not self.openai_client:
             yield {
                 'type': 'error',
-                'message': "OpenAI client not configured. Cannot generate response."
+                'message': "OpenAI API not available (quota exceeded). Falling back to search results."
+            }
+            
+            # Still perform search and return results
+            search_results = await self.search(
+                query=query,
+                limit=search_limit,
+                min_score=min_score
+            )
+            
+            # Send search completion with sources
+            yield {
+                'type': 'search_complete',
+                'message': f'Found {len(search_results)} relevant sources',
+                'sources': [result.to_dict() for result in search_results]
+            }
+            
+            # Generate fallback response
+            if search_results:
+                fallback_response = f"""Based on the search results I found, here's what I can tell you about "{query}":
+
+"""
+                for i, result in enumerate(search_results[:3], 1):
+                    source_collection = result.chunk.metadata.get('source_collection', 'unknown')
+                    if source_collection == 'web_search':
+                        source_type = "🌐 Web Search"
+                    elif source_collection == 'documents':
+                        source_type = "📄 Document" 
+                    else:
+                        source_type = "📚 Knowledge Base"
+                    
+                    fallback_response += f"{i}. {source_type}: {result.chunk.document_title}\n"
+                    fallback_response += f"   Content: {result.chunk.content[:200]}...\n"
+                    fallback_response += f"   Relevance: {result.score:.3f}\n\n"
+                
+                fallback_response += f"Note: OpenAI API is currently unavailable, so I'm showing the raw search results. Found {len(search_results)} total sources."
+                
+                # Stream the fallback response
+                for chunk in fallback_response.split('\n'):
+                    if chunk:
+                        yield {
+                            'type': 'content',
+                            'content': chunk + '\n'
+                        }
+            else:
+                yield {
+                    'type': 'content',
+                    'content': "I couldn't find relevant information in the knowledge base for your query. OpenAI API is also unavailable."
+                }
+            
+            yield {
+                'type': 'generation_complete',
+                'message': 'Fallback response complete'
             }
             return
         

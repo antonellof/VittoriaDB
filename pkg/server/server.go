@@ -694,36 +694,82 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse query parameters
-	query := r.URL.Query().Get("query")
-	if query == "" {
-		// Try to get query from POST body
-		if r.Method == "POST" {
-			var req struct {
-				Query string `json:"query"`
-				Limit int    `json:"limit"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				s.writeError(w, http.StatusBadRequest, "Invalid JSON or missing query parameter", err)
-				return
-			}
-			query = req.Query
-		} else {
+	// Parse query parameters and request body
+	var query string
+	var limit int = 10
+	var includeMetadata bool = true
+	var includeContent bool = false
+	
+	if r.Method == "POST" {
+		// Parse JSON body for POST requests
+		var req struct {
+			Query           string `json:"query"`
+			Limit           int    `json:"limit"`
+			IncludeMetadata bool   `json:"include_metadata"`
+			IncludeContent  bool   `json:"include_content"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, http.StatusBadRequest, "Invalid JSON", err)
+			return
+		}
+		query = req.Query
+		if req.Limit > 0 {
+			limit = req.Limit
+		}
+		includeMetadata = req.IncludeMetadata
+		includeContent = req.IncludeContent
+	} else {
+		// Parse URL parameters for GET requests
+		query = r.URL.Query().Get("query")
+		if query == "" {
 			s.writeError(w, http.StatusBadRequest, "Missing query parameter", nil)
 			return
 		}
-	}
-
-	// Parse limit parameter
-	limit := 10 // default
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
-			limit = parsedLimit
+		
+		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+			if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+				limit = parsedLimit
+			}
+		}
+		
+		if metadataStr := r.URL.Query().Get("include_metadata"); metadataStr != "" {
+			includeMetadata = metadataStr == "true"
+		}
+		
+		if contentStr := r.URL.Query().Get("include_content"); contentStr != "" {
+			includeContent = contentStr == "true"
 		}
 	}
 
-	// Perform text search with automatic vectorization
-	results, err := collection.SearchText(r.Context(), query, limit, nil)
+	if query == "" {
+		s.writeError(w, http.StatusBadRequest, "Missing query parameter", nil)
+		return
+	}
+
+	// Create search request with content inclusion
+	searchReq := &core.SearchRequest{
+		Limit:           limit,
+		IncludeMetadata: includeMetadata,
+		IncludeContent:  includeContent,
+	}
+
+	// Perform text search with automatic vectorization using the enhanced search
+	// First get the vectorizer to convert text to vector
+	vectorizer := collection.GetVectorizer()
+	if vectorizer == nil {
+		s.writeError(w, http.StatusInternalServerError, "No vectorizer available", nil)
+		return
+	}
+	
+	// Generate embedding from query text
+	queryEmbedding, err := vectorizer.GenerateEmbedding(r.Context(), query)
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "Failed to generate query embedding", err)
+		return
+	}
+	
+	searchReq.Vector = queryEmbedding
+	results, err := collection.Search(r.Context(), searchReq)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "Search failed", err)
 		return

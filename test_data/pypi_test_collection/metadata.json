@@ -1,0 +1,14 @@
+{
+  "name": "pypi_test_collection",
+  "dimensions": 384,
+  "metric": 0,
+  "index_type": 0,
+  "created": "2025-09-15T16:53:05.917362+02:00",
+  "modified": "2025-09-15T16:53:05.917362+02:00",
+  "content_storage": {
+    "enabled": true,
+    "field_name": "_content",
+    "max_size": 1048576,
+    "compressed": false
+  }
+}

@@ -14,43 +14,117 @@ import (
 
 // VittoriaCollection implements the Collection interface
 type VittoriaCollection struct {
-	name       string
-	dimensions int
-	metric     DistanceMetric
-	indexType  IndexType
-	dataDir    string
-	vectors    map[string]*Vector
-	mu         sync.RWMutex
-	created    time.Time
-	modified   time.Time
-	closed     bool
-	vectorizer embeddings.Vectorizer
+	name           string
+	dimensions     int
+	metric         DistanceMetric
+	indexType      IndexType
+	dataDir        string
+	vectors        map[string]*Vector
+	mu             sync.RWMutex
+	created        time.Time
+	modified       time.Time
+	closed         bool
+	vectorizer     embeddings.Vectorizer
+	contentStorage *ContentStorageConfig
 }
 
 // CollectionMetadata represents collection metadata stored on disk
 type CollectionMetadata struct {
-	Name       string         `json:"name"`
-	Dimensions int            `json:"dimensions"`
-	Metric     DistanceMetric `json:"metric"`
-	IndexType  IndexType      `json:"index_type"`
-	Created    time.Time      `json:"created"`
-	Modified   time.Time      `json:"modified"`
+	Name           string                `json:"name"`
+	Dimensions     int                   `json:"dimensions"`
+	Metric         DistanceMetric        `json:"metric"`
+	IndexType      IndexType             `json:"index_type"`
+	Created        time.Time             `json:"created"`
+	Modified       time.Time             `json:"modified"`
+	ContentStorage *ContentStorageConfig `json:"content_storage,omitempty"`
 }
 
 // NewCollection creates a new collection
 func NewCollection(name string, dimensions int, metric DistanceMetric, indexType IndexType, dataDir string) (*VittoriaCollection, error) {
 	collection := &VittoriaCollection{
-		name:       name,
-		dimensions: dimensions,
-		metric:     metric,
-		indexType:  indexType,
-		dataDir:    filepath.Join(dataDir, name),
-		vectors:    make(map[string]*Vector),
-		created:    time.Now(),
-		modified:   time.Now(),
+		name:           name,
+		dimensions:     dimensions,
+		metric:         metric,
+		indexType:      indexType,
+		dataDir:        filepath.Join(dataDir, name),
+		vectors:        make(map[string]*Vector),
+		created:        time.Now(),
+		modified:       time.Now(),
+		contentStorage: DefaultContentStorageConfig(),
 	}
 
 	return collection, nil
+}
+
+// NewCollectionWithContentStorage creates a new collection with custom content storage config
+func NewCollectionWithContentStorage(name string, dimensions int, metric DistanceMetric, indexType IndexType, dataDir string, contentStorage *ContentStorageConfig) (*VittoriaCollection, error) {
+	if contentStorage == nil {
+		contentStorage = DefaultContentStorageConfig()
+	}
+
+	collection := &VittoriaCollection{
+		name:           name,
+		dimensions:     dimensions,
+		metric:         metric,
+		indexType:      indexType,
+		dataDir:        filepath.Join(dataDir, name),
+		vectors:        make(map[string]*Vector),
+		created:        time.Now(),
+		modified:       time.Now(),
+		contentStorage: contentStorage,
+	}
+
+	return collection, nil
+}
+
+// GetContentStorageConfig returns the current content storage configuration
+func (c *VittoriaCollection) GetContentStorageConfig() *ContentStorageConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.contentStorage == nil {
+		return DefaultContentStorageConfig()
+	}
+
+	// Return a copy to prevent external modifications
+	return &ContentStorageConfig{
+		Enabled:    c.contentStorage.Enabled,
+		FieldName:  c.contentStorage.FieldName,
+		MaxSize:    c.contentStorage.MaxSize,
+		Compressed: c.contentStorage.Compressed,
+	}
+}
+
+// SetContentStorageConfig updates the content storage configuration
+func (c *VittoriaCollection) SetContentStorageConfig(config *ContentStorageConfig) error {
+	if config == nil {
+		return fmt.Errorf("content storage config cannot be nil")
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Validate configuration
+	if config.FieldName == "" {
+		return fmt.Errorf("content storage field name cannot be empty")
+	}
+
+	if config.MaxSize < 0 {
+		return fmt.Errorf("content storage max size cannot be negative")
+	}
+
+	// Update configuration
+	c.contentStorage = &ContentStorageConfig{
+		Enabled:    config.Enabled,
+		FieldName:  config.FieldName,
+		MaxSize:    config.MaxSize,
+		Compressed: config.Compressed,
+	}
+
+	// Mark collection as modified
+	c.modified = time.Now()
+
+	return nil
 }
 
 // LoadCollection loads an existing collection from disk
@@ -69,15 +143,22 @@ func LoadCollection(name string, dataDir string) (*VittoriaCollection, error) {
 		return nil, fmt.Errorf("failed to parse metadata: %w", err)
 	}
 
+	// Use loaded content storage config or default
+	contentStorage := metadata.ContentStorage
+	if contentStorage == nil {
+		contentStorage = DefaultContentStorageConfig()
+	}
+
 	collection := &VittoriaCollection{
-		name:       metadata.Name,
-		dimensions: metadata.Dimensions,
-		metric:     metadata.Metric,
-		indexType:  metadata.IndexType,
-		dataDir:    collectionDir,
-		vectors:    make(map[string]*Vector),
-		created:    metadata.Created,
-		modified:   metadata.Modified,
+		name:           metadata.Name,
+		dimensions:     metadata.Dimensions,
+		metric:         metadata.Metric,
+		indexType:      metadata.IndexType,
+		dataDir:        collectionDir,
+		vectors:        make(map[string]*Vector),
+		created:        metadata.Created,
+		modified:       metadata.Modified,
+		contentStorage: contentStorage,
 	}
 
 	// Load vectors from disk
@@ -325,6 +406,15 @@ func (c *VittoriaCollection) Search(ctx context.Context, req *SearchRequest) (*S
 			}
 		}
 
+		// Include content if requested and content storage is enabled
+		if req.IncludeContent && c.contentStorage != nil && c.contentStorage.Enabled {
+			if content, exists := vector.Metadata[c.contentStorage.FieldName]; exists {
+				if contentStr, ok := content.(string); ok {
+					result.Content = contentStr
+				}
+			}
+		}
+
 		candidates = append(candidates, result)
 	}
 
@@ -469,12 +559,13 @@ func (c *VittoriaCollection) sortCandidates(candidates []*SearchResult) {
 // saveMetadata saves collection metadata to disk
 func (c *VittoriaCollection) saveMetadata() error {
 	metadata := CollectionMetadata{
-		Name:       c.name,
-		Dimensions: c.dimensions,
-		Metric:     c.metric,
-		IndexType:  c.indexType,
-		Created:    c.created,
-		Modified:   c.modified,
+		Name:           c.name,
+		Dimensions:     c.dimensions,
+		Metric:         c.metric,
+		IndexType:      c.indexType,
+		Created:        c.created,
+		Modified:       c.modified,
+		ContentStorage: c.contentStorage,
 	}
 
 	data, err := json.MarshalIndent(metadata, "", "  ")
@@ -587,11 +678,38 @@ func (c *VittoriaCollection) InsertText(ctx context.Context, textVector *TextVec
 		return fmt.Errorf("failed to generate embedding: %w", err)
 	}
 
+	// Prepare metadata - preserve original content if enabled
+	metadata := make(map[string]interface{})
+
+	// Copy existing metadata
+	if textVector.Metadata != nil {
+		for k, v := range textVector.Metadata {
+			metadata[k] = v
+		}
+	}
+
+	// Store original content if content storage is enabled
+	if c.contentStorage != nil && c.contentStorage.Enabled {
+		// Check content size limits
+		if c.contentStorage.MaxSize > 0 && int64(len(textVector.Text)) > c.contentStorage.MaxSize {
+			return fmt.Errorf("content size (%d bytes) exceeds maximum allowed size (%d bytes)", len(textVector.Text), c.contentStorage.MaxSize)
+		}
+
+		// Store content (with optional compression in future)
+		contentToStore := textVector.Text
+		if c.contentStorage.Compressed {
+			// TODO: Implement compression if needed
+			// For now, store as-is
+		}
+
+		metadata[c.contentStorage.FieldName] = contentToStore
+	}
+
 	// Create vector and insert
 	vector := &Vector{
 		ID:       textVector.ID,
 		Vector:   embedding,
-		Metadata: textVector.Metadata,
+		Metadata: metadata,
 	}
 
 	return c.Insert(ctx, vector)
@@ -618,10 +736,37 @@ func (c *VittoriaCollection) InsertTextBatch(ctx context.Context, textVectors []
 	// Create vectors and insert
 	vectors := make([]*Vector, len(textVectors))
 	for i, tv := range textVectors {
+		// Prepare metadata - preserve original content if enabled
+		metadata := make(map[string]interface{})
+
+		// Copy existing metadata
+		if tv.Metadata != nil {
+			for k, v := range tv.Metadata {
+				metadata[k] = v
+			}
+		}
+
+		// Store original content if content storage is enabled
+		if c.contentStorage != nil && c.contentStorage.Enabled {
+			// Check content size limits
+			if c.contentStorage.MaxSize > 0 && int64(len(tv.Text)) > c.contentStorage.MaxSize {
+				return fmt.Errorf("content size (%d bytes) exceeds maximum allowed size (%d bytes) for vector %s", len(tv.Text), c.contentStorage.MaxSize, tv.ID)
+			}
+
+			// Store content (with optional compression in future)
+			contentToStore := tv.Text
+			if c.contentStorage.Compressed {
+				// TODO: Implement compression if needed
+				// For now, store as-is
+			}
+
+			metadata[c.contentStorage.FieldName] = contentToStore
+		}
+
 		vectors[i] = &Vector{
 			ID:       tv.ID,
 			Vector:   embeddings[i],
-			Metadata: tv.Metadata,
+			Metadata: metadata,
 		}
 	}
 

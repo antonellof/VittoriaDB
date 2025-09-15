@@ -25,6 +25,7 @@ The Python SDK can either:
 - **⚡ High Performance**: HNSW indexing provides sub-millisecond search times
 - **🐍 Pythonic API**: Clean, intuitive Python interface with type hints
 - **🔌 Dual Mode**: Works with existing servers or auto-starts local instances
+- **🤖 RAG-Ready (NEW v0.4.0)**: Built-in content storage for Retrieval-Augmented Generation
 
 ## 📦 Installation
 
@@ -201,6 +202,83 @@ results = collection.search_text(
 db.close()
 ```
 
+## 🤖 RAG (Retrieval-Augmented Generation) Support (NEW v0.4.0)
+
+VittoriaDB now includes built-in support for RAG systems by automatically storing original text content alongside vector embeddings.
+
+### Content Storage Features
+- ✅ **Automatic Content Preservation**: Original text stored with vectors
+- ✅ **No External Storage Required**: Self-contained RAG solution
+- ✅ **Configurable Limits**: Control storage size and behavior
+- ✅ **Fast Retrieval**: Single query returns both vectors and content
+
+### RAG-Optimized Collection
+```python
+import vittoriadb
+from vittoriadb import ContentStorageConfig
+from vittoriadb.configure import Configure
+
+db = vittoriadb.connect()
+
+# Create RAG-optimized collection with content storage
+collection = db.create_collection(
+    name="rag_documents",
+    dimensions=384,
+    vectorizer_config=Configure.Vectors.auto_embeddings(),
+    content_storage=ContentStorageConfig(
+        enabled=True,           # Store original content
+        field_name="_content",  # Metadata field name
+        max_size=1048576,      # 1MB limit per document
+        compressed=False       # Compression (future feature)
+    )
+)
+
+# Insert documents - content automatically preserved
+collection.insert_text(
+    id="doc1",
+    text="VittoriaDB is a high-performance vector database perfect for RAG applications...",
+    metadata={"title": "VittoriaDB Guide", "category": "documentation"}
+)
+
+# Search with content retrieval for RAG
+results = collection.search_text(
+    query="vector database RAG",
+    limit=5,
+    include_content=True  # Retrieve original content for LLM context
+)
+
+# Use results for RAG
+for result in results:
+    print(f"Score: {result.score:.3f}")
+    print(f"Content: {result.content}")  # Original text for LLM context
+    print(f"Has content: {result.has_content()}")
+
+db.close()
+```
+
+### RAG Workflow Example
+```python
+# 1. Store knowledge base
+documents = [
+    "VittoriaDB supports automatic embeddings...",
+    "RAG systems combine retrieval and generation...",
+    "Vector databases enable semantic search..."
+]
+
+for i, doc in enumerate(documents):
+    collection.insert_text(f"kb_{i}", doc, {"type": "knowledge"})
+
+# 2. Query with content for LLM
+query = "How do vector databases work?"
+results = collection.search_text(query, include_content=True)
+
+# 3. Build context for LLM
+context = "\n".join([r.content for r in results if r.has_content()])
+
+# 4. Send to your LLM
+# response = your_llm.generate(query, context)
+```
+
 ## 🎛️ Vectorizer Configuration
 
 VittoriaDB supports multiple vectorizer backends for automatic embedding generation:
@@ -328,26 +406,26 @@ results = collection.search_text(
 
 ## 📋 API Reference
 
-### VittoriaDB Class
+### Collection Class
+- `insert(id, vector, metadata=None)` - Insert single vector
+- `insert_batch(vectors)` - Insert multiple vectors
+- `insert_text(id, text, metadata=None)` - Insert text (auto-vectorized with content storage)
+- `insert_text_batch(texts)` - Insert multiple texts (auto-vectorized with content storage)
+- `search(vector, limit=10, filter=None, include_content=False)` - Vector similarity search
+- `search_text(query, limit=10, filter=None, include_content=False)` - Text search with content retrieval
+- `upload_file(file_path, chunk_size=500, **kwargs)` - Upload and process document
+- `get(id)` - Get vector by ID
+- `delete(id)` - Delete vector by ID
+- `count()` - Get total vector count
+
+### VittoriaDB Class (Enhanced v0.4.0)
 - `connect(url=None, auto_start=True, **kwargs)` - Connect to VittoriaDB
-- `create_collection(name, dimensions, metric="cosine", vectorizer_config=None)` - Create collection
+- `create_collection(name, dimensions, metric="cosine", vectorizer_config=None, content_storage=None)` - Create collection with content storage
 - `get_collection(name)` - Get existing collection
 - `list_collections()` - List all collections
 - `delete_collection(name)` - Delete collection
 - `health()` - Get server health status
 - `close()` - Close connection
-
-### Collection Class
-- `insert(id, vector, metadata=None)` - Insert single vector
-- `insert_batch(vectors)` - Insert multiple vectors
-- `insert_text(id, text, metadata=None)` - Insert text (auto-vectorized)
-- `insert_text_batch(texts)` - Insert multiple texts (auto-vectorized)
-- `search(vector, limit=10, filter=None)` - Vector similarity search
-- `search_text(query, limit=10, filter=None)` - Text search (auto-vectorized)
-- `upload_file(file_path, chunk_size=500, **kwargs)` - Upload and process document
-- `get(id)` - Get vector by ID
-- `delete(id)` - Delete vector by ID
-- `count()` - Get total vector count
 
 ## 🤝 Contributing
 
@@ -374,6 +452,25 @@ This project is licensed under the MIT License - see the [LICENSE](../../LICENSE
 - 🌐 **Distributed Mode**: Multi-node clustering support
 - 📊 **Analytics**: Query performance monitoring and optimization
 - 🎯 **More Vectorizers**: Support for additional embedding models
+- 🗜️ **Content Compression**: Compress stored content to save space
+
+## 📝 Changelog v0.4.0
+
+### 🆕 New Features
+- **🤖 Built-in Content Storage**: Automatic preservation of original text for RAG applications
+- **📋 ContentStorageConfig**: Configurable content storage with size limits and field names
+- **🔍 Enhanced Search**: New `include_content` parameter for content retrieval
+- **📊 Collection Info**: Content storage configuration in collection metadata
+
+### 🔧 Enhancements
+- **⚡ Better RAG Support**: No external storage required for RAG workflows
+- **🎯 Improved API**: Enhanced search methods with content retrieval options
+- **📚 Updated Documentation**: Comprehensive RAG examples and best practices
+
+### 🔄 Backward Compatibility
+- All existing APIs work unchanged
+- Content storage is optional and configurable
+- Default behavior maintains compatibility with v0.3.x
 
 ---
 

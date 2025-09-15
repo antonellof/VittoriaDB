@@ -139,12 +139,41 @@ class Vector:
 
 
 @dataclass
+class ContentStorageConfig:
+    """Configuration for content storage."""
+    enabled: bool = True
+    field_name: str = "_content"
+    max_size: int = 1048576  # 1MB default
+    compressed: bool = False
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API calls."""
+        return {
+            "enabled": self.enabled,
+            "field_name": self.field_name,
+            "max_size": self.max_size,
+            "compressed": self.compressed
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ContentStorageConfig':
+        """Create ContentStorageConfig from dictionary."""
+        return cls(
+            enabled=data.get("enabled", True),
+            field_name=data.get("field_name", "_content"),
+            max_size=data.get("max_size", 1048576),
+            compressed=data.get("compressed", False)
+        )
+
+
+@dataclass
 class SearchResult:
     """Represents a search result."""
     id: str
     score: float
     vector: Optional[List[float]] = None
     metadata: Optional[Dict[str, Any]] = None
+    content: Optional[str] = None  # NEW: Original content if available
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SearchResult':
@@ -153,8 +182,23 @@ class SearchResult:
             id=data["id"],
             score=data["score"],
             vector=data.get("vector"),
-            metadata=data.get("metadata")
+            metadata=data.get("metadata"),
+            content=data.get("content")  # NEW: Include content field
         )
+    
+    def has_content(self) -> bool:
+        """Check if this result has original content."""
+        return self.content is not None and self.content != ""
+    
+    def get_content(self, content_field_name: str = "_content") -> str:
+        """Get original content from content field or metadata."""
+        if self.content:
+            return self.content
+        
+        if self.metadata and content_field_name in self.metadata:
+            return str(self.metadata[content_field_name])
+        
+        return ""
 
 
 @dataclass
@@ -167,10 +211,15 @@ class CollectionInfo:
     vector_count: int
     created: str
     modified: str
+    content_storage: Optional[ContentStorageConfig] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'CollectionInfo':
         """Create CollectionInfo from dictionary."""
+        content_storage = None
+        if "content_storage" in data and data["content_storage"]:
+            content_storage = ContentStorageConfig.from_dict(data["content_storage"])
+        
         return cls(
             name=data["name"],
             dimensions=data["dimensions"],
@@ -178,7 +227,8 @@ class CollectionInfo:
             index_type=IndexType(data["index_type"]),
             vector_count=data["vector_count"],
             created=data["created"],
-            modified=data["modified"]
+            modified=data["modified"],
+            content_storage=content_storage
         )
 
 

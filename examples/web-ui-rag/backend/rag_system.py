@@ -12,7 +12,7 @@ import time
 
 import vittoriadb
 from vittoriadb.configure import Configure
-from vittoriadb.types import IndexType, DistanceMetric
+from vittoriadb.types import IndexType, DistanceMetric, ContentStorageConfig
 import openai
 from openai import OpenAI
 
@@ -87,7 +87,7 @@ class RAGSystem:
             )
             logger.info(f"✅ Connected to VittoriaDB at {self.vittoriadb_url}")
             
-            # Create collections with HNSW indexing for better performance
+            # Create collections with HNSW indexing and content storage for better performance
             for name, config in self.collection_configs.items():
                 try:
                     collection = self.db.create_collection(
@@ -100,7 +100,13 @@ class RAGSystem:
                             "ef_construction": 200, # Build quality vs speed
                             "ef_search": 50        # Search quality vs speed
                         },
-                        vectorizer_config=Configure.Vectors.auto_embeddings()
+                        vectorizer_config=Configure.Vectors.auto_embeddings(),
+                        content_storage=ContentStorageConfig(  # NEW: Enhanced content storage
+                            enabled=True,
+                            field_name="_content",
+                            max_size=2097152,  # 2MB limit for documents
+                            compressed=False
+                        )
                     )
                     self.collections[name] = collection
                     logger.info(f"✅ Collection '{name}' ready with HNSW indexing")
@@ -190,13 +196,23 @@ class RAGSystem:
                 all_results.extend(results)
         
         # Sort by score descending and remove duplicates
-        seen_files = set()
+        seen_items = set()
         unique_results = []
         
         for result in sorted(all_results, key=lambda x: x.score, reverse=True):
-            file_id = result.metadata.get('filename', '') + str(result.metadata.get('chunk_index', 0))
-            if file_id not in seen_files:
-                seen_files.add(file_id)
+            # Create unique identifier based on content type
+            if result.metadata.get('filename'):
+                # For uploaded documents: use filename + chunk_index
+                item_id = result.metadata.get('filename', '') + str(result.metadata.get('chunk_index', 0))
+            elif result.metadata.get('url'):
+                # For web research: use URL + title
+                item_id = result.metadata.get('url', '') + result.metadata.get('title', '')
+            else:
+                # Fallback: use title + source + timestamp
+                item_id = result.metadata.get('title', '') + result.source + str(result.metadata.get('timestamp', 0))
+            
+            if item_id not in seen_items:
+                seen_items.add(item_id)
                 unique_results.append(result)
         
         return unique_results[:limit]
@@ -231,18 +247,50 @@ class RAGSystem:
                         continue
                 return []
             else:
-                # Regular semantic search
+                # Regular semantic search with content retrieval
                 results = collection.search_text(
                     query=query,
                     limit=limit,
-                    include_metadata=True
+                    include_metadata=True,
+                    include_content=True  # NEW: Retrieve original content directly
                 )
                 
                 search_results = []
                 for result in results:
                     if result.score >= min_score:
+                        # Get content from multiple possible sources (prioritizing new content field)
+                        content = None
+                        
+                        # First priority: VittoriaDB's new content field (from enhanced search)
+                        if hasattr(result, 'content') and result.content:
+                            content = result.content
+                        # Second priority: VittoriaDB's content storage in metadata
+                        elif result.metadata and '_content' in result.metadata and result.metadata['_content']:
+                            content = result.metadata['_content']
+                        # Third priority: Legacy content field in metadata
+                        elif result.metadata and 'content' in result.metadata and result.metadata['content']:
+                            content = result.metadata['content']
+                        # Fourth priority: Use snippet if available (for web search results)
+                        elif result.metadata and 'snippet' in result.metadata and result.metadata['snippet']:
+                            # For web search results, enhance snippet with title and URL
+                            snippet = result.metadata['snippet']
+                            title = result.metadata.get('title', '')
+                            url = result.metadata.get('url', '')
+                            
+                            if title and url:
+                                content = f"Title: {title}\nURL: {url}\n\nContent: {snippet}"
+                            elif title:
+                                content = f"Title: {title}\n\nContent: {snippet}"
+                            else:
+                                content = snippet
+                        # Last resort: use title
+                        elif result.metadata and result.metadata.get('title'):
+                            content = f"Title: {result.metadata['title']}"
+                        else:
+                            content = 'No content available'
+                        
                         search_result = SearchResult(
-                            content=result.metadata.get('content', 'No content'),
+                            content=content,
                             metadata=result.metadata,
                             score=result.score,
                             source=collection_name

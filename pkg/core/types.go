@@ -69,6 +69,24 @@ type TextVector struct {
 	Metadata map[string]interface{} `json:"metadata"`
 }
 
+// ContentStorageConfig represents how original content is stored
+type ContentStorageConfig struct {
+	Enabled    bool   `json:"enabled" yaml:"enabled"`       // Whether to store original content
+	FieldName  string `json:"field_name" yaml:"field_name"` // Metadata field name for content (default: "_content")
+	MaxSize    int64  `json:"max_size" yaml:"max_size"`     // Max content size in bytes (0 = unlimited)
+	Compressed bool   `json:"compressed" yaml:"compressed"` // Whether to compress content
+}
+
+// DefaultContentStorageConfig returns the default content storage configuration
+func DefaultContentStorageConfig() *ContentStorageConfig {
+	return &ContentStorageConfig{
+		Enabled:    true,
+		FieldName:  "_content",
+		MaxSize:    1048576, // 1MB default limit
+		Compressed: false,   // Compression disabled by default for simplicity
+	}
+}
+
 // CreateCollectionRequest represents a collection creation request
 type CreateCollectionRequest struct {
 	Name             string                       `json:"name"`
@@ -77,6 +95,7 @@ type CreateCollectionRequest struct {
 	IndexType        IndexType                    `json:"index_type"`
 	Config           map[string]interface{}       `json:"config"`
 	VectorizerConfig *embeddings.VectorizerConfig `json:"vectorizer_config,omitempty"`
+	ContentStorage   *ContentStorageConfig        `json:"content_storage,omitempty"`
 }
 
 // SearchRequest represents a vector search request
@@ -87,6 +106,7 @@ type SearchRequest struct {
 	Filter          *Filter                `json:"filter"`
 	IncludeVector   bool                   `json:"include_vector"`
 	IncludeMetadata bool                   `json:"include_metadata"`
+	IncludeContent  bool                   `json:"include_content"` // Whether to include original content in results
 	SearchParams    map[string]interface{} `json:"search_params"`
 }
 
@@ -104,6 +124,29 @@ type SearchResult struct {
 	Score    float32                `json:"score"`
 	Vector   []float32              `json:"vector,omitempty"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Content  string                 `json:"content,omitempty"` // Original content if available
+}
+
+// HasContent returns true if the search result contains original content
+func (sr *SearchResult) HasContent() bool {
+	return sr.Content != ""
+}
+
+// GetContent returns the original content, first from the Content field, then from metadata
+func (sr *SearchResult) GetContent(contentFieldName string) string {
+	if sr.Content != "" {
+		return sr.Content
+	}
+
+	if sr.Metadata != nil {
+		if content, exists := sr.Metadata[contentFieldName]; exists {
+			if contentStr, ok := content.(string); ok {
+				return contentStr
+			}
+		}
+	}
+
+	return ""
 }
 
 // Filter represents metadata filtering
@@ -282,4 +325,8 @@ type Collection interface {
 	// Vectorizer access
 	HasVectorizer() bool
 	GetVectorizer() embeddings.Vectorizer
+
+	// Content storage access
+	GetContentStorageConfig() *ContentStorageConfig
+	SetContentStorageConfig(config *ContentStorageConfig) error
 }

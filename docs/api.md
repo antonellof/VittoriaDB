@@ -138,6 +138,34 @@ curl -X POST http://localhost:8080/collections \
   }'
 ```
 
+**Collection with Content Storage (RAG-Optimized):**
+```bash
+curl -X POST http://localhost:8080/collections \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "rag_documents",
+    "dimensions": 384,
+    "metric": 0,
+    "index_type": 1,
+    "vectorizer_config": {
+      "type": "sentence_transformers",
+      "model": "all-MiniLM-L6-v2"
+    },
+    "content_storage": {
+      "enabled": true,
+      "field_name": "_content",
+      "max_size": 1048576,
+      "compressed": false
+    }
+  }'
+```
+
+**Content Storage Configuration:**
+- `enabled` (bool): Store original text content alongside vectors (default: true)
+- `field_name` (string): Metadata field name for content (default: "_content")  
+- `max_size` (int64): Maximum content size in bytes, 0 = unlimited (default: 1MB)
+- `compressed` (bool): Compress content to save space (default: false)
+
 ### Get Collection Information
 ```bash
 curl http://localhost:8080/collections/documents
@@ -242,6 +270,15 @@ curl -G http://localhost:8080/collections/documents/search \
   --data-urlencode 'offset=20'
 ```
 
+### Search with Original Content (RAG-Optimized)
+```bash
+curl -G http://localhost:8080/collections/documents/search \
+  --data-urlencode 'vector=[0.1,0.2,0.3,0.4]' \
+  --data-urlencode 'limit=5' \
+  --data-urlencode 'include_content=true' \
+  --data-urlencode 'include_metadata=true'
+```
+
 **Search Response:**
 ```json
 {
@@ -252,8 +289,10 @@ curl -G http://localhost:8080/collections/documents/search \
       "vector": [0.1, 0.2, 0.3, 0.4],
       "metadata": {
         "title": "Introduction to AI",
-        "category": "technology"
-      }
+        "category": "technology",
+        "_content": "Artificial intelligence is transforming..."
+      },
+      "content": "Artificial intelligence is transforming how we process data through machine learning algorithms..."
     }
   ],
   "total": 100,
@@ -261,6 +300,25 @@ curl -G http://localhost:8080/collections/documents/search \
   "request_id": "req_123456"
 }
 ```
+
+**Search Parameters:**
+- `include_content` (bool): Include original text content in results (requires content storage enabled)
+
+## 🤖 RAG (Retrieval-Augmented Generation) Support
+
+VittoriaDB now includes built-in support for RAG systems by automatically storing original text content alongside vector embeddings. This eliminates the need for external content storage and provides seamless integration with LLMs.
+
+**Benefits:**
+- ✅ **No External Storage Required**: Original content stored directly in VittoriaDB
+- ✅ **Atomic Operations**: Vector and content always in sync
+- ✅ **Fast Retrieval**: Single query returns both similarity scores and original text
+- ✅ **Configurable**: Adjustable content limits and storage options
+- ✅ **RAG-Ready**: Perfect for feeding context to language models
+
+**Example RAG Workflow:**
+1. Store documents with `InsertText()` → Automatically generates embeddings + stores content
+2. Search with `include_content=true` → Returns relevant text passages
+3. Feed retrieved content to LLM → Generate contextual responses
 
 ## 🔤 Text Operations (Auto-Vectorized)
 

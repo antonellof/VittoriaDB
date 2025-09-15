@@ -22,6 +22,7 @@ from .types import (
     DistanceMetric,
     IndexType,
     VectorizerConfig,
+    ContentStorageConfig,
     VittoriaDBError,
     ConnectionError,
     CollectionError,
@@ -184,7 +185,8 @@ class VittoriaDB:
                          metric: Union[DistanceMetric, str] = DistanceMetric.COSINE,
                          index_type: Union[IndexType, str] = IndexType.FLAT,
                          config: Optional[Dict[str, Any]] = None,
-                         vectorizer_config: Optional[VectorizerConfig] = None) -> 'Collection':
+                         vectorizer_config: Optional[VectorizerConfig] = None,
+                         content_storage: Optional[ContentStorageConfig] = None) -> 'Collection':
         """Create a new vector collection."""
         # Convert to enum values and then to integers (Go server expects integers)
         if isinstance(metric, DistanceMetric):
@@ -212,6 +214,10 @@ class VittoriaDB:
         # Add vectorizer configuration if provided
         if vectorizer_config:
             payload["vectorizer_config"] = vectorizer_config.to_dict()
+        
+        # Add content storage configuration if provided
+        if content_storage:
+            payload["content_storage"] = content_storage.to_dict()
         
         response = self._make_request("POST", "/collections", json=payload)
         self._handle_response(response)
@@ -334,14 +340,16 @@ class Collection:
                offset: int = 0,
                filter: Optional[Dict[str, Any]] = None,
                include_vector: bool = False,
-               include_metadata: bool = True) -> List[SearchResult]:
+               include_metadata: bool = True,
+               include_content: bool = False) -> List[SearchResult]:
         """Search for similar vectors."""
         params = {
             "vector": ",".join(map(str, vector)),
             "limit": limit,
             "offset": offset,
             "include_vector": str(include_vector).lower(),
-            "include_metadata": str(include_metadata).lower()
+            "include_metadata": str(include_metadata).lower(),
+            "include_content": str(include_content).lower()
         }
         
         if filter:
@@ -452,7 +460,8 @@ class Collection:
                    query: str,
                    limit: int = 10,
                    filter: Optional[Dict[str, Any]] = None,
-                   include_metadata: bool = True) -> List[SearchResult]:
+                   include_metadata: bool = True,
+                   include_content: bool = False) -> List[SearchResult]:
         """
         Search using a text query that will be automatically vectorized.
         
@@ -463,6 +472,7 @@ class Collection:
             limit: Maximum number of results to return
             filter: Optional metadata filter
             include_metadata: Whether to include metadata in results
+            include_content: Whether to include original content in results
             
         Returns:
             List of SearchResult objects
@@ -473,7 +483,8 @@ class Collection:
         payload = {
             "query": query,
             "limit": limit,
-            "include_metadata": include_metadata
+            "include_metadata": include_metadata,
+            "include_content": include_content
         }
         
         if filter:

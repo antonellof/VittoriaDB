@@ -11,6 +11,7 @@ The VittoriaDB server is a single Go binary that provides:
 - Server-side automatic embeddings
 - Document processing capabilities
 - RESTful API with native Python client
+- **NEW in v0.4.0**: Built-in content storage for RAG applications
 
 Example usage:
     import vittoriadb
@@ -53,6 +54,7 @@ from .types import (
     IndexType,
     VectorizerType,
     VectorizerConfig,
+    ContentStorageConfig,
     VittoriaDBError,
     ConnectionError,
     CollectionError,
@@ -62,7 +64,7 @@ from .types import (
 )
 from . import configure
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "VittoriaDB Team"
 __email__ = "team@vittoriadb.dev"
 
@@ -77,6 +79,7 @@ __all__ = [
     "IndexType",
     "VectorizerType",
     "VectorizerConfig",
+    "ContentStorageConfig",
     "VittoriaDBError",
     "ConnectionError",
     "CollectionError",

@@ -376,7 +376,7 @@ async def advanced_rag_stream(request: ChatRequest):
             async for chunk in rag_engine.stream_rag_response(
                 query=request.message,
                 search_limit=request.search_limit,
-                min_score=0.1,
+                min_score=0.3,  # Improved minimum score for better relevance
                 model=request.model
             ):
                 if chunk['type'] == 'search_complete':
@@ -445,35 +445,82 @@ async def chat_stream(request: ChatRequest):
                         query=request.message,
                         collections=request.search_collections,
                         limit=request.search_limit,
-                        min_score=0.1
+                        min_score=0.3  # Increased minimum score for better relevance
                     )
                     
                     if search_results:
-                        yield f"data: {json.dumps({'type': 'search_progress', 'message': f'✅ Found {len(search_results)} relevant documents'})}\n\n"
+                        # Filter results by relevance score
+                        high_relevance = [r for r in search_results if r.score >= 0.5]
+                        medium_relevance = [r for r in search_results if 0.3 <= r.score < 0.5]
                         
-                        # Build context from search results
+                        yield f"data: {json.dumps({'type': 'search_progress', 'message': f'✅ Found {len(search_results)} relevant documents (High: {len(high_relevance)}, Medium: {len(medium_relevance)})'})}\n\n"
+                        
+                        # Build enhanced context from search results
                         context_parts = []
                         for i, result in enumerate(search_results[:5]):  # Use top 5 results
-                            context_parts.append(f"Document {i+1} ({result.source}):\n{result.content}\n")
+                            # Determine source type and add metadata
+                            source_collection = result.metadata.get('source_collection', result.source)
+                            if source_collection == 'web_research' or result.metadata.get('source') == 'web_search':
+                                source_type = "🌐 WEB SEARCH"
+                                source_url = result.metadata.get('url', '')
+                                url_info = f" | URL: {source_url}" if source_url else ""
+                            elif source_collection == 'documents':
+                                source_type = "📄 UPLOADED DOCUMENT"
+                                url_info = ""
+                            else:
+                                source_type = "📚 KNOWLEDGE BASE"
+                                url_info = ""
+                            
+                            # Enhanced context with relevance scoring
+                            relevance_indicator = "🔥 HIGH" if result.score >= 0.5 else "📊 MEDIUM" if result.score >= 0.3 else "📉 LOW"
+                            
+                            context_parts.append(f"""
+{source_type}: {result.metadata.get('title', 'Unknown Document')} 
+Relevance: {relevance_indicator} ({result.score:.3f}){url_info}
+Content: {result.content}
+---""")
                         
                         context_text = "\n".join(context_parts)
                     else:
-                        yield f"data: {json.dumps({'type': 'search_progress', 'message': '⚠️ No relevant documents found'})}\n\n"
+                        yield f"data: {json.dumps({'type': 'search_progress', 'message': '⚠️ No highly relevant documents found (score < 0.3)'})}\n\n"
                         
                 except Exception as e:
                     yield f"data: {json.dumps({'type': 'search_progress', 'message': f'❌ Search error: {str(e)}'})}\n\n"
             
             # Create system prompt with context
             if context_text:
-                system_prompt = f"""You are an intelligent assistant with access to a VittoriaDB vector database knowledge base. 
+                system_prompt = f"""You are VittoriaDB Assistant, an AI-powered research agent with ACTIVE web search and database capabilities.
 
-Based on the following documents from the knowledge base, please answer the user's question:
+🔍 **YOUR CAPABILITIES:**
+- **Real-time Web Search**: I just performed live web searches and found current information
+- **Knowledge Database**: I have access to uploaded documents, code repositories, and stored research
+- **Current Date**: {time.strftime('%B %Y')} - I can access TODAY'S information, not outdated training data
 
+🚨 **CRITICAL INSTRUCTIONS:**
+1. **USE ONLY PROVIDED CONTEXT**: Answer using ONLY the search results and database content provided below
+2. **NO TRAINING DATA**: Do NOT use your pre-training knowledge - use ONLY the context provided
+3. **BE CURRENT**: The web search results contain TODAY'S information - prioritize them!
+4. **Source Attribution**: Always reference the actual sources (document titles, URLs, relevance scores)
+5. **Relevance Priority**: Focus on 🔥 HIGH relevance sources (≥ 0.5) for accuracy
+
+🌐 **RETRIEVED CONTEXT** (Retrieved {time.strftime('%B %d, %Y')}):
 {context_text}
 
-Please provide a helpful and accurate response based on the information above. If the documents don't contain relevant information for the user's question, say so clearly."""
+⚡ **Remember**: You have LIVE web search capabilities and CURRENT database access. Use the fresh information provided above to give up-to-date, accurate answers. If the context doesn't contain sufficient information to answer the question, clearly state what information is missing and what was found instead."""
             else:
-                system_prompt = """You are an intelligent assistant. The user asked a question but no relevant documents were found in the knowledge base. Please provide a helpful general response and suggest how they might find the information they need."""
+                system_prompt = f"""You are VittoriaDB Assistant, an AI-powered research agent.
+
+❌ **NO RELEVANT CONTEXT FOUND**: No documents in the knowledge base matched the user's query with sufficient relevance (score ≥ 0.3).
+
+🔍 **WHAT TO DO:**
+1. Clearly explain that no relevant information was found in the knowledge base
+2. Suggest the user try:
+   - Different search terms or keywords
+   - Adding relevant documents to the knowledge base
+   - Using the web research feature to find current information
+3. Provide general guidance if appropriate, but make it clear it's not from the knowledge base
+
+⚠️ **IMPORTANT**: Do not make up information or use outdated training data. Be honest about the lack of relevant context."""
             
             # Start OpenAI streaming with context
             yield f"data: {json.dumps({'type': 'search_progress', 'message': '🤖 Generating response...'})}\n\n"
