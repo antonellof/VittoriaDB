@@ -56,6 +56,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import {
   AudioWaveformIcon,
   BarChartIcon,
@@ -193,7 +194,7 @@ export default function Home() {
   
   // Sidebar collapsible sections
   const [collectionsExpanded, setCollectionsExpanded] = useState(true)
-  const [systemStatusExpanded, setSystemStatusExpanded] = useState(false)
+  const [systemStatusExpanded, setSystemStatusExpanded] = useState(true)  // Expanded by default to show session status
 
   // Create new chat session
   const createNewChatSession = async (title?: string) => {
@@ -251,19 +252,27 @@ export default function Home() {
 
   // Enhanced new chat function
   const startNewChat = async () => {
-    // Save current chat if exists
-    if (currentSessionId && messages.length > 0) {
-      await saveChatHistory()
+    try {
+      // Save current chat if exists
+      if (currentSessionId && messages.length > 0) {
+        await saveChatHistory()
+      }
+      
+      // Clear current chat and reset to initial state
+      setMessages([])
+      setSearchProgress([])
+      setError(null)
+      setIsLoading(false)
+      setStatus('ready')  // Reset status to show welcome screen
+      setText('')  // Clear input text
+      setCurrentSessionId(null)  // Clear session to show "None" status
+      
+      // Note: New session will be created automatically on first message
+      
+      console.log('New chat started - returning to welcome screen')
+    } catch (error) {
+      console.error('Error starting new chat:', error)
     }
-    
-    // Clear current chat
-    setMessages([])
-    setSearchProgress([])
-    setError(null)
-    setIsLoading(false)
-    
-    // Create new session
-    await createNewChatSession()
   }
 
   // Send message directly to backend using new RAG streaming endpoint
@@ -695,11 +704,6 @@ export default function Home() {
                 <h1 className="font-semibold">Your Personal Assistant</h1>
                 <p className="text-xs text-muted-foreground">
                   Powered by VittoriaDB • Connected to your knowledge base
-                  {currentSessionId && (
-                    <span className="ml-2 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xs">
-                      Session Active {autoSaveEnabled ? '• Auto-save ON' : ''}
-                    </span>
-                  )}
                 </p>
               </div>
             </div>
@@ -715,18 +719,10 @@ export default function Home() {
             {/* Chat Management Section */}
             <div className="p-4 border-b">
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4" />
-                    Chat
-                  </h3>
-                  {currentSessionId && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <div className="w-2 h-2 rounded-full bg-green-500" />
-                      <span>Active</span>
-                    </div>
-                  )}
-                </div>
+                <h3 className="font-medium flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  Chat
+                </h3>
                 
                 {/* New Chat Button */}
                 <Button
@@ -739,33 +735,6 @@ export default function Home() {
                   <Plus className="h-4 w-4" />
                   New Chat
                 </Button>
-                
-                {/* Session Info */}
-                {currentSessionId && (
-                  <div className="bg-muted/50 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium">Current Session</span>
-                      {autoSaveEnabled && (
-                        <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                          <Save className="h-3 w-3" />
-                          <span>Auto-save</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      ID: {currentSessionId.slice(0, 8)}...
-                    </div>
-                    <Button
-                      onClick={saveChatHistory}
-                      variant="ghost"
-                      size="sm"
-                      className="w-full mt-2 h-7 text-xs"
-                    >
-                      <Save className="h-3 w-3 mr-1" />
-                      Save Now
-                    </Button>
-                  </div>
-                )}
               </div>
             </div>
             
@@ -837,29 +806,68 @@ export default function Home() {
                 </Button>
                 
                 {systemStatusExpanded && (
-                  <div className="space-y-2 text-sm pl-2">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Total Vectors:</span>
-                    <span>{stats?.total_vectors || 0}</span>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">OpenAI:</span>
-                    <span className={cn(
-                      health?.openai_configured ? "text-green-600" : "text-red-600"
-                    )}>
-                      {health?.openai_configured ? "Configured" : "Not configured"}
-                    </span>
-                  </div>
+                  <div className="space-y-3 text-sm pl-2">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Total Vectors:</span>
+                      <span>{stats?.total_vectors || 0}</span>
+                    </div>
+                    
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">OpenAI:</span>
+                      <span className={cn(
+                        health?.openai_configured ? "text-green-600" : "text-red-600"
+                      )}>
+                        {health?.openai_configured ? "Configured" : "Not configured"}
+                      </span>
+                    </div>
 
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">VittoriaDB:</span>
-                    <span className={cn(
-                      health?.vittoriadb_connected ? "text-green-600" : "text-red-600"
-                    )}>
-                      {health?.vittoriadb_connected ? "Connected" : "Disconnected"}
-                    </span>
-                  </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">VittoriaDB:</span>
+                      <span className={cn(
+                        health?.vittoriadb_connected ? "text-green-600" : "text-red-600"
+                      )}>
+                        {health?.vittoriadb_connected ? "Connected" : "Disconnected"}
+                      </span>
+                    </div>
+                    
+                    {/* Chat Session Status */}
+                    <div className="border-t pt-3 space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Chat Session:</span>
+                        <span className={cn(
+                          currentSessionId ? "text-green-600" : "text-gray-500"
+                        )}>
+                          {currentSessionId ? "Active" : "None"}
+                        </span>
+                      </div>
+                      
+                      {currentSessionId && (
+                        <div className="text-xs text-muted-foreground">
+                          ID: {currentSessionId.slice(0, 8)}...
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Auto-save:</span>
+                        <Switch
+                          checked={autoSaveEnabled}
+                          onCheckedChange={setAutoSaveEnabled}
+                          size="sm"
+                        />
+                      </div>
+                      
+                      {currentSessionId && (
+                        <Button
+                          onClick={saveChatHistory}
+                          variant="ghost"
+                          size="sm"
+                          className="w-full h-7 text-xs"
+                        >
+                          <Save className="h-3 w-3 mr-1" />
+                          Save Now
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
