@@ -414,16 +414,27 @@ class VittoriaRAGEngine:
             results = []
             for i, result in enumerate(search_results):
                 if result.score >= min_score:
-                    # Reconstruct DocumentChunk from search result
+                    # Reconstruct DocumentChunk from search result with enhanced content retrieval
+                    # Priority: VittoriaDB v0.4.0 content field > _content metadata > legacy content > title
+                    content = ""
+                    if hasattr(result, 'content') and result.content:
+                        content = result.content
+                    elif result.metadata.get('_content'):
+                        content = result.metadata['_content']
+                    elif result.metadata.get('content'):
+                        content = result.metadata['content']
+                    else:
+                        content = result.metadata.get('title', 'No content available')
+                    
                     chunk = DocumentChunk(
                         id=result.id,
-                        content=result.metadata.get('content', ''),  # Get content from metadata
+                        content=content,
                         document_id=result.metadata.get('document_id', ''),
-                        document_title=result.metadata.get('document_title', ''),
+                        document_title=result.metadata.get('document_title', result.metadata.get('title', '')),
                         chunk_index=result.metadata.get('chunk_index', 0),
-                        chunk_size=result.metadata.get('chunk_size', 0),
+                        chunk_size=result.metadata.get('chunk_size', len(content)),
                         start_char=result.metadata.get('start_char', 0),
-                        end_char=result.metadata.get('end_char', 0),
+                        end_char=result.metadata.get('end_char', len(content)),
                         metadata=result.metadata
                     )
                     
