@@ -252,13 +252,26 @@ export default function Home() {
 
   // Enhanced new chat function
   const startNewChat = async () => {
+    console.log('🆕 New Chat button clicked!')
+    console.log('Current state:', { 
+      currentSessionId: currentSessionId?.slice(0, 8), 
+      messagesCount: messages.length, 
+      isLoading,
+      status 
+    })
+    
     try {
+      // Force enable the button by clearing loading state first
+      setIsLoading(false)
+      
       // Save current chat if exists
       if (currentSessionId && messages.length > 0) {
+        console.log('💾 Saving current chat before starting new one...')
         await saveChatHistory()
       }
       
       // Clear current chat and reset to initial state
+      console.log('🧹 Clearing chat state...')
       setMessages([])
       setSearchProgress([])
       setError(null)
@@ -269,9 +282,12 @@ export default function Home() {
       
       // Note: New session will be created automatically on first message
       
-      console.log('New chat started - returning to welcome screen')
+      console.log('✅ New chat started - returning to welcome screen')
+      console.log('New state:', { messagesCount: 0, status: 'ready', sessionId: null })
     } catch (error) {
-      console.error('Error starting new chat:', error)
+      console.error('❌ Error starting new chat:', error)
+      // Make sure we don't leave the UI in a broken state
+      setIsLoading(false)
     }
   }
 
@@ -726,11 +742,14 @@ export default function Home() {
                 
                 {/* New Chat Button */}
                 <Button
-                  onClick={startNewChat}
+                  onClick={() => {
+                    console.log('🔘 New Chat button clicked - handler triggered')
+                    startNewChat()
+                  }}
                   className="w-full flex items-center gap-2"
                   variant="outline"
                   size="sm"
-                  disabled={isLoading}
+                  disabled={false}  // Always enabled for new chat
                 >
                   <Plus className="h-4 w-4" />
                   New Chat
