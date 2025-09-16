@@ -67,7 +67,7 @@ import {
   GlobeIcon,
   GraduationCapIcon,
   ImageIcon,
-  NotebookPenIcon,
+  BookIcon,
   PaperclipIcon,
   ScreenShareIcon,
   Settings,
@@ -87,7 +87,8 @@ import {
   Plus,
   MessageSquare,
   Save,
-  ArrowDown
+  ArrowDown,
+  Square
 } from 'lucide-react'
 import { nanoid } from 'nanoid'
 import { useTheme } from 'next-themes'
@@ -168,8 +169,8 @@ export default function Home() {
   const [status, setStatus] = useState<'submitted' | 'streaming' | 'ready' | 'error'>('ready')
   const [showScrollButton, setShowScrollButton] = useState(false)
   
-  const { theme, setTheme } = useTheme()
-  const { stats, health, fetchStats, fetchHealth } = useStatsStore()
+  const { } = useTheme()
+  const { stats, health } = useStatsStore()
   const { isConnected, processingFiles } = useWebSocketNotifications()
 
   // Drag & drop for file upload
@@ -194,8 +195,10 @@ export default function Home() {
 
   // Custom chat state (not using useChat hook)
   const [isLoading, setIsLoading] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [searchProgress, setSearchProgress] = useState<string[]>([])
+  const [abortController, setAbortController] = useState<AbortController | null>(null)
   
   // Chat session management
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
@@ -210,7 +213,7 @@ export default function Home() {
   const [showScrollDown, setShowScrollDown] = useState(false)
 
 
-  // Create new chat session
+  // Create new chat session (optimized for speed)
   const createNewChatSession = async (title?: string) => {
     try {
       const response = await fetch('http://localhost:8501/chat/sessions', {
@@ -218,17 +221,20 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: title || `Chat ${new Date().toLocaleString()}`
-        })
+        }),
+        // Faster timeout for session creation
+        signal: AbortSignal.timeout(5000) // 5 second timeout
       })
       
       if (response.ok) {
         const data = await response.json()
-        setCurrentSessionId(data.session.session_id)
-        console.log('New chat session created:', data.session.session_id)
+        console.log('✅ New chat session created:', data.session.session_id)
         return data.session.session_id
+      } else {
+        console.warn('Session creation failed with status:', response.status)
       }
     } catch (error) {
-      console.error('Failed to create chat session:', error)
+      console.warn('Failed to create chat session (continuing without):', error)
     }
     return null
   }
@@ -264,10 +270,51 @@ export default function Home() {
     }
   }
 
+  // Stop current operation
+  const stopOperation = async () => {
+    try {
+      // Send cancel notification to backend
+      fetch('http://localhost:8501/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(error => {
+        console.warn('Failed to notify backend of cancellation:', error)
+      })
+      
+      // Abort the current request
+      if (abortController) {
+        abortController.abort()
+        setAbortController(null)
+      }
+      
+      setIsLoading(false)
+      setIsStreaming(false)
+      setSearchProgress([])
+      toast.success('Operation stopped')
+    } catch (error) {
+      console.error('Error stopping operation:', error)
+      // Still try to stop the frontend operation even if backend notification fails
+      if (abortController) {
+        abortController.abort()
+        setAbortController(null)
+      }
+      setIsLoading(false)
+      setIsStreaming(false)
+      setSearchProgress([])
+      toast.success('Operation stopped')
+    }
+  }
+
   // Enhanced new chat function
-  const startNewChat = () => {
+  const startNewChat = async () => {
     
     try {
+      // Stop any ongoing operation first
+      if (abortController) {
+        abortController.abort()
+        setAbortController(null)
+      }
+      
       // Save current chat in background (non-blocking)
       if (currentSessionId && messages.length > 0) {
         // Fire and forget - don't wait for completion
@@ -281,35 +328,44 @@ export default function Home() {
       setSearchProgress([])
       setError(null)
       setIsLoading(false)
+      setIsStreaming(false)
       setStatus('ready')  // Reset status to show welcome screen
       setText('')  // Clear input text
-      setCurrentSessionId(null)  // Clear session to show "None" status
       
-      // Note: New session will be created automatically on first message
+      // Create new session immediately when starting new chat
+      if (autoSaveEnabled) {
+        const sessionId = await createNewChatSession(`New Chat ${new Date().toLocaleString()}`)
+        if (sessionId) {
+          setCurrentSessionId(sessionId)
+          console.log('✅ Pre-created session for new chat:', sessionId)
+        }
+      } else {
+        setCurrentSessionId(null)  // Clear session if auto-save disabled
+      }
       
     } catch (error) {
       console.error('❌ Error starting new chat:', error)
       // Make sure we don't leave the UI in a broken state
       setIsLoading(false)
+      setIsStreaming(false)
+      setCurrentSessionId(null)
     }
   }
 
   // Send message directly to backend using new RAG streaming endpoint
   const sendMessage = async (userMessage: string, options: { webSearch?: boolean } = {}) => {
+    // Create abort controller for cancellation
+    const controller = new AbortController()
+    setAbortController(controller)
+    
     try {
+      // Start UI updates immediately for blazing fast response
       setIsLoading(true)
+      setIsStreaming(true)
       setError(null)
       setSearchProgress([])
       
-      // Create session if this is the first message
-      if (!currentSessionId) {
-        const sessionId = await createNewChatSession(`Chat: ${userMessage.slice(0, 30)}...`)
-        if (!sessionId) {
-          throw new Error('Failed to create chat session')
-        }
-      }
-      
-      // Add user message
+      // Add user message immediately to UI
       const userMsg: MessageType = {
         key: `user-${Date.now()}`,
         from: 'user',
@@ -322,7 +378,7 @@ export default function Home() {
       
       setMessages(prev => [...prev, userMsg])
       
-      // Create assistant message placeholder
+      // Create assistant message placeholder immediately
       const assistantMsg: MessageType = {
         key: `assistant-${Date.now()}`,
         from: 'assistant',
@@ -335,6 +391,14 @@ export default function Home() {
       
       setMessages(prev => [...prev, assistantMsg])
       
+      // Create session only if needed and auto-save is enabled
+      if (!currentSessionId && autoSaveEnabled) {
+        const sessionId = await createNewChatSession(`Chat: ${userMessage.slice(0, 30)}...`)
+        if (sessionId) {
+          setCurrentSessionId(sessionId)
+        }
+      }
+      
       // Stream from backend
       const response = await fetch('http://localhost:8501/rag/stream', {
         method: 'POST',
@@ -346,7 +410,8 @@ export default function Home() {
           model: 'gpt-4',
           search_limit: 5,
           web_search: options.webSearch || false
-        })
+        }),
+        signal: controller.signal
       })
 
       if (!response.ok) {
@@ -376,9 +441,8 @@ export default function Home() {
               const data = JSON.parse(line.slice(6))
               
               if (data.type === 'reasoning_start') {
-                // Start reasoning/thinking - hide loading state
+                // Start reasoning/thinking - keep loading state for stop button
 // console.log('🧠 Reasoning start received:', data)
-                setIsLoading(false)
                 setMessages(prev => 
                   prev.map(msg => 
                     msg.key === assistantMsg.key 
@@ -476,26 +540,35 @@ export default function Home() {
       }
       
     } catch (error: any) {
-      console.error('Chat error:', error)
-      setError(error)
-      toast.error('Chat error: ' + error.message)
+      if (error.name === 'AbortError') {
+        console.log('Request was aborted')
+        toast.success('Operation stopped')
+      } else {
+        console.error('Chat error:', error)
+        setError(error)
+        toast.error('Chat error: ' + error.message)
+      }
     } finally {
       setIsLoading(false)
+      setIsStreaming(false)
+      setAbortController(null)
     }
   }
 
-  // Fetch initial stats
+  // Initialize app and create initial session if needed
   useEffect(() => {
-    
-    // Auto-refresh stats every 10 seconds
-    const statsInterval = setInterval(fetchStats, 10000)
-    const healthInterval = setInterval(fetchHealth, 30000)
-    
-    return () => {
-      clearInterval(statsInterval)
-      clearInterval(healthInterval)
+    // Create initial session if auto-save is enabled and no session exists
+    if (autoSaveEnabled && !currentSessionId) {
+      createNewChatSession('Welcome Chat').then(sessionId => {
+        if (sessionId) {
+          setCurrentSessionId(sessionId)
+          console.log('✅ Pre-created welcome session:', sessionId)
+        }
+      }).catch(error => {
+        console.warn('Failed to create welcome session:', error)
+      })
     }
-  }, [fetchStats, fetchHealth])
+  }, [autoSaveEnabled, currentSessionId])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -521,17 +594,18 @@ export default function Home() {
       // Look for the main conversation viewport - likely has viewport height constraints
       const candidates = [
         // Look for elements with viewport-based heights
-        ...document.querySelectorAll('[class*="h-screen"]'),
-        ...document.querySelectorAll('[class*="h-full"]'),
-        ...document.querySelectorAll('[class*="min-h"]'),
+        ...Array.from(document.querySelectorAll('[class*="h-screen"]')),
+        ...Array.from(document.querySelectorAll('[class*="h-full"]')),
+        ...Array.from(document.querySelectorAll('[class*="min-h"]')),
         // Look for elements with overflow auto that have height constraints
-        ...document.querySelectorAll('div[style*="overflow: auto"]'),
+        ...Array.from(document.querySelectorAll('div[style*="overflow: auto"]')),
         // Fallback selectors
-        ...document.querySelectorAll('[data-radix-scroll-area-viewport]')
+        ...Array.from(document.querySelectorAll('[data-radix-scroll-area-viewport]'))
       ]
       
       // Find the element that actually has scrollable content
-      for (const element of candidates) {
+      for (let i = 0; i < candidates.length; i++) {
+        const element = candidates[i] as HTMLElement
         const { scrollHeight, clientHeight } = element
         const computedStyle = window.getComputedStyle(element)
         
@@ -581,7 +655,8 @@ export default function Home() {
       
       // First try to find the div with inline style "overflow: auto"
       const allDivs = document.querySelectorAll('div')
-      for (const div of allDivs) {
+      for (let i = 0; i < allDivs.length; i++) {
+        const div = allDivs[i]
         const style = div.getAttribute('style') || ''
         if (style.includes('overflow: auto') || style.includes('overflow:auto')) {
           element = div
@@ -634,7 +709,8 @@ export default function Home() {
     
     // Find the div with overflow: auto for mutation observation
     const allDivs = document.querySelectorAll('div')
-    for (const div of allDivs) {
+    for (let i = 0; i < allDivs.length; i++) {
+      const div = allDivs[i]
       const style = div.getAttribute('style') || ''
       if (style.includes('overflow: auto') || style.includes('overflow:auto')) {
         observerElement = div
@@ -794,9 +870,9 @@ export default function Home() {
       }
       
       input.click()
-    } else {
-      toast.success('File action', { description: action })
-    }
+      } else {
+        toast.success(`File action: ${action}`)
+      }
   }
 
   const handleSuggestionClick = (suggestion: string) => {
@@ -832,7 +908,7 @@ export default function Home() {
     }
     
     // Send text message
-    if (hasText) {
+    if (hasText && message.text) {
       sendMessage(message.text, { webSearch: useWebSearch })
     }
     
@@ -1004,7 +1080,6 @@ export default function Home() {
                         <Switch
                           checked={autoSaveEnabled}
                           onCheckedChange={setAutoSaveEnabled}
-                          size="sm"
                         />
                       </div>
                       
@@ -1293,33 +1368,14 @@ export default function Home() {
                     </Branch>
                   ))}
 
-                  {/* Thinking Mode / Loader with Search Progress */}
-                  {isLoading && (
+                  {/* Initial Loading State - only show if no messages with reasoning yet */}
+                  {(isLoading || isStreaming) && !messages.some(m => m.reasoning) && (
                     <Message from="assistant">
                       <div>
                         <div className="not-prose max-w-prose space-y-4">
                           <div className="flex w-full items-center gap-2 text-muted-foreground text-sm animate-thinking-pulse">
                             <Brain className="size-4" />
-                            <span className="flex-1 text-left">Thinking<span className="animate-thinking-dots"></span></span>
-                          </div>
-                          <div className="space-y-3">
-                            <ChainOfThoughtStep
-                              icon={Brain}
-                              label={useWebSearch 
-                                ? "Searching your knowledge base and researching on the web..."
-                                : "Searching your knowledge base for relevant information..."
-                              }
-                              status="active"
-                            >
-                              {/* Live Search Progress */}
-                              <div className="text-xs text-muted-foreground space-y-1 max-h-40 overflow-y-auto">
-                                {searchProgress.map((progress, index) => (
-                                  <div key={index} className="py-0.5 opacity-80">
-                                    {progress}
-                                  </div>
-                                ))}
-                              </div>
-                            </ChainOfThoughtStep>
+                            <span className="flex-1 text-left">Starting<span className="animate-thinking-dots"></span></span>
                           </div>
                         </div>
                       </div>
@@ -1388,6 +1444,7 @@ export default function Home() {
                   variant="outline"
                   size="sm"
                   onClick={() => setDataSourcesOpen(true)}
+                  disabled={isLoading || isStreaming}
                 >
                   <Database size={16} />
                   <span className="ml-1">Add Data</span>
@@ -1400,25 +1457,37 @@ export default function Home() {
                   )}
                   onClick={() => setUseWebSearch(!useWebSearch)}
                   variant={useWebSearch ? "default" : "outline"}
+                  disabled={isLoading || isStreaming}
                 >
                   <GlobeIcon size={16} />
                   <span>Web Search</span>
                 </PromptInputButton>
               </PromptInputTools>
               
-                <PromptInputButton
-                  className={cn(
-                    "rounded-full font-medium transition-colors",
-                    text.trim() && !isLoading
-                      ? "bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
-                      : "text-muted-foreground"
-                  )}
-                  disabled={!text.trim() || isLoading}
-                  type="submit"
-                >
-                  <ArrowUp size={16} />
-                  <span className="sr-only">{isLoading ? 'Sending...' : 'Send'}</span>
-                </PromptInputButton>
+                {(isLoading || isStreaming) ? (
+                  <PromptInputButton
+                    className="rounded-full font-medium transition-colors bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200"
+                    onClick={stopOperation}
+                    type="button"
+                  >
+                    <Square size={16} />
+                    <span className="sr-only">Stop</span>
+                  </PromptInputButton>
+                ) : (
+                  <PromptInputButton
+                    className={cn(
+                      "rounded-full font-medium transition-colors",
+                      text.trim()
+                        ? "bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
+                        : "text-muted-foreground"
+                    )}
+                    disabled={!text.trim()}
+                    type="submit"
+                  >
+                    <ArrowUp size={16} />
+                    <span className="sr-only">Send</span>
+                  </PromptInputButton>
+                )}
             </PromptInputToolbar>
           </PromptInput>
         </div>

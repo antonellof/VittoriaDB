@@ -652,6 +652,28 @@ Content: {result.chunk.content[:600]}...
         }
     )
 
+@app.post("/cancel")
+async def cancel_operation():
+    """Cancel current operation"""
+    try:
+        logger.info("🛑 Cancel operation requested")
+        
+        # For now, we'll just log the cancellation request
+        # In a more advanced implementation, you could:
+        # 1. Track active operations with unique IDs
+        # 2. Use asyncio.Task cancellation
+        # 3. Set cancellation flags for long-running operations
+        
+        return {
+            "success": True,
+            "message": "Cancel request received",
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        logger.error("Failed to process cancel request", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Cancel failed: {str(e)}")
+
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
     """Process chat message with immediate streaming response"""

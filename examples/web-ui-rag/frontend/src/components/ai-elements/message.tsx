@@ -4,12 +4,12 @@ import {
   AvatarImage,
 } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import type { Message } from "ai";
+import type { Message as AIMessage } from "ai";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps, HTMLAttributes } from "react";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
-  from: Message["role"];
+  from: AIMessage["role"];
 };
 
 export const Message = ({ className, from, ...props }: MessageProps) => (

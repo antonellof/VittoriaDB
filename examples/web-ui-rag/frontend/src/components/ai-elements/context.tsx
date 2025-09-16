@@ -354,7 +354,7 @@ export const ContextCacheUsage = ({
   ...props
 }: ContextCacheUsageProps) => {
   const { usage, modelId } = useContextValue();
-  const cacheTokens = usage?.cachedInputTokens ?? 0;
+  const cacheTokens = (usage as any)?.cachedInputTokens ?? 0;
 
   if (children) {
     return children;

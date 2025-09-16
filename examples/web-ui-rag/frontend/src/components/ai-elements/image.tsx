@@ -1,7 +1,11 @@
 import { cn } from "@/lib/utils";
-import type { Experimental_GeneratedImage } from "ai";
+// import type { Experimental_GeneratedImage } from "ai";
 
-export type ImageProps = Experimental_GeneratedImage & {
+export type ImageProps = {
+  base64?: string;
+  url?: string;
+  uint8Array?: Uint8Array;
+  mediaType?: string;
   className?: string;
   alt?: string;
 };
