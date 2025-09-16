@@ -8,6 +8,8 @@
 
 **VittoriaDB** is a high-performance, embedded vector database designed for local AI development and production deployments. Built with simplicity and performance in mind, it provides a zero-configuration solution for vector similarity search, perfect for RAG applications, semantic search, and AI prototyping.
 
+**🆕 NEW in v0.4.0:** Complete ChatGPT-like web interface with built-in content storage for production-ready RAG applications!
+
 ## 🎯 Why VittoriaDB?
 
 **The Problem:** Existing vector databases are either too complex for local development (requiring Docker, Kubernetes, or cloud deployment) or too limited for production use (in-memory only, no persistence, poor performance).
@@ -16,6 +18,15 @@
 
 ## ✨ Key Features
 
+### 🌐 **Complete RAG Web Application (NEW in v0.4.0)**
+- **💬 ChatGPT-like Interface**: Modern web UI with real-time streaming responses
+- **📁 Multi-Format Document Processing**: PDF, DOCX, TXT, MD, HTML support
+- **🌐 Intelligent Web Research**: Real-time search with automatic knowledge storage
+- **👨‍💻 GitHub Repository Indexing**: Index and search entire codebases
+- **🛑 Operation Control**: Stop button for cancelling long-running operations
+- **📚 Built-in Content Storage**: No external storage needed for RAG workflows
+
+### 🚀 **Core Database Features**
 - **🎯 Zero Configuration**: Works immediately after installation
 - **🤖 Professional Embedding Services**: Industry-standard vectorization options
   - **Ollama**: Local ML models (high quality, no API costs)
@@ -34,7 +45,9 @@
 
 - **[📦 Installation Guide](docs/installation.md)** - Complete installation instructions for all platforms
 - **[🚀 Quick Start](#-quick-start)** - Get started in 30 seconds
+- **[🌐 Web UI RAG Application](examples/web-ui-rag/README.md)** - **NEW!** Complete ChatGPT-like interface
 - **[🐍 Python SDK](https://pypi.org/project/vittoriadb/)** - Official Python package on PyPI (`pip install vittoriadb`)
+- **[📚 Content Storage](docs/content-storage.md)** - **NEW!** Built-in content storage for RAG workflows
 - **[🤖 Embedding Services](docs/embeddings.md)** - Complete guide to auto_embeddings() and vectorizers
 - **[📖 Usage Examples](#-usage-examples)** - Python, Go, and cURL examples
 - **[🛠️ API Reference](docs/api.md)** - Complete REST API documentation
@@ -54,10 +67,23 @@ curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/
 ### Manual Installation
 ```bash
 # Download for your platform from GitHub Releases
-wget https://github.com/antonellof/VittoriaDB/releases/download/v0.2.0/vittoriadb-v0.2.0-linux-amd64.tar.gz
-tar -xzf vittoriadb-v0.2.0-linux-amd64.tar.gz
-chmod +x vittoriadb-v0.2.0-linux-amd64
-./vittoriadb-v0.2.0-linux-amd64 run
+wget https://github.com/antonellof/VittoriaDB/releases/download/v0.4.0/vittoriadb-v0.4.0-linux-amd64.tar.gz
+tar -xzf vittoriadb-v0.4.0-linux-amd64.tar.gz
+chmod +x vittoriadb-v0.4.0-linux-amd64
+./vittoriadb-v0.4.0-linux-amd64 run
+```
+
+### 🌐 Web UI RAG Application (NEW!)
+```bash
+# Clone the repository
+git clone https://github.com/antonellof/VittoriaDB.git
+cd VittoriaDB/examples/web-ui-rag
+
+# Start the complete RAG application
+./start.sh
+
+# Access the ChatGPT-like interface
+open http://localhost:3000
 ```
 
 ### Python SDK
@@ -74,22 +100,43 @@ cd VittoriaDB/sdk/python && ./install-dev.sh
 
 ## 🚀 Quick Start
 
-### 30-Second Demo
+### 🌐 Web UI Demo (NEW!)
+```bash
+# 1. Clone and start the complete RAG application
+git clone https://github.com/antonellof/VittoriaDB.git
+cd VittoriaDB/examples/web-ui-rag && ./start.sh
+
+# 2. Open the ChatGPT-like interface
+open http://localhost:3000
+
+# 3. Upload documents, ask questions, and get AI-powered responses!
+```
+
+### 30-Second API Demo
 ```bash
 # 1. Start VittoriaDB
 vittoriadb run
 
-# 2. Create a collection and insert vectors
+# 2. Create a collection with content storage (NEW!)
 curl -X POST http://localhost:8080/collections \
   -H "Content-Type: application/json" \
-  -d '{"name": "docs", "dimensions": 4}'
+  -d '{
+    "name": "rag_docs", 
+    "dimensions": 384,
+    "content_storage": {"enabled": true}
+  }'
 
-curl -X POST http://localhost:8080/collections/docs/vectors \
+# 3. Insert text with automatic content preservation
+curl -X POST http://localhost:8080/collections/rag_docs/text \
   -H "Content-Type: application/json" \
-  -d '{"id": "doc1", "vector": [0.1, 0.2, 0.3, 0.4], "metadata": {"title": "Test Document"}}'
+  -d '{
+    "id": "doc1", 
+    "text": "VittoriaDB is a high-performance vector database",
+    "metadata": {"title": "About VittoriaDB"}
+  }'
 
-# 3. Search for similar vectors
-curl "http://localhost:8080/collections/docs/search?vector=0.1,0.2,0.3,0.4&limit=5"
+# 4. Search with content retrieval
+curl "http://localhost:8080/collections/rag_docs/search/text?query=vector%20database&include_content=true"
 ```
 
 ### Python Quick Start
