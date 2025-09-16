@@ -8,10 +8,10 @@ VittoriaDB provides a comprehensive command-line interface for database manageme
 ```bash
 # Show version information
 vittoriadb version
-# VittoriaDB v0.2.0
+# VittoriaDB v0.4.0
 # Build Time: 2025-09-13T11:45:48Z
 # Git Commit: dce98c0
-# Git Tag: v0.2.0
+# Git Tag: v0.4.0
 ```
 
 ### Server Management
@@ -36,7 +36,7 @@ vittoriadb info [--data-dir <path>]
 vittoriadb stats [--data-dir <path>]
 
 # Example output:
-# 🚀 VittoriaDB v0.2.0 - Database Information
+# 🚀 VittoriaDB v0.4.0 - Database Information
 # =====================================
 # 📁 Data Directory: /Users/you/project/data
 # 📍 Relative Path: ./data
@@ -185,7 +185,7 @@ When starting VittoriaDB, you'll see comprehensive startup information:
 
 ```bash
 vittoriadb run
-# 🚀 VittoriaDB v0.2.0 starting...
+# 🚀 VittoriaDB v0.4.0 starting...
 # 📁 Data directory: /Users/you/project/data
 # 🌐 HTTP server: http://localhost:8080
 # 📊 Web dashboard: http://localhost:8080/

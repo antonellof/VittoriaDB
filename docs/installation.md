@@ -32,24 +32,24 @@ The Python SDK automatically:
 curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/install.sh | bash
 
 # Or install specific version
-curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/install.sh | bash -s -- --version v0.2.0
+curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/install.sh | bash -s -- --version v0.4.0
 ```
 
 #### Manual Download
 Download from [GitHub Releases](https://github.com/antonellof/VittoriaDB/releases/latest):
 
-- **Linux AMD64**: `vittoriadb-v0.2.0-linux-amd64.tar.gz`
-- **Linux ARM64**: `vittoriadb-v0.2.0-linux-arm64.tar.gz`  
-- **macOS Intel**: `vittoriadb-v0.2.0-darwin-amd64.tar.gz`
-- **macOS Apple Silicon**: `vittoriadb-v0.2.0-darwin-arm64.tar.gz`
-- **Windows**: `vittoriadb-v0.2.0-windows-amd64.zip`
+- **Linux AMD64**: `vittoriadb-v0.4.0-linux-amd64.tar.gz`
+- **Linux ARM64**: `vittoriadb-v0.4.0-linux-arm64.tar.gz`  
+- **macOS Intel**: `vittoriadb-v0.4.0-darwin-amd64.tar.gz`
+- **macOS Apple Silicon**: `vittoriadb-v0.4.0-darwin-arm64.tar.gz`
+- **Windows**: `vittoriadb-v0.4.0-windows-amd64.zip`
 
 ```bash
 # Example for Linux
-wget https://github.com/antonellof/VittoriaDB/releases/download/v0.2.0/vittoriadb-v0.2.0-linux-amd64.tar.gz
-tar -xzf vittoriadb-v0.2.0-linux-amd64.tar.gz
-chmod +x vittoriadb-v0.2.0-linux-amd64
-./vittoriadb-v0.2.0-linux-amd64 run
+wget https://github.com/antonellof/VittoriaDB/releases/download/v0.4.0/vittoriadb-v0.4.0-linux-amd64.tar.gz
+tar -xzf vittoriadb-v0.4.0-linux-amd64.tar.gz
+chmod +x vittoriadb-v0.4.0-linux-amd64
+./vittoriadb-v0.4.0-linux-amd64 run
 ```
 
 #### From Source
@@ -116,15 +116,15 @@ brew install vittoriadb
 ```bash
 # Download for your architecture
 # Intel Macs
-wget https://github.com/antonellof/VittoriaDB/releases/download/v0.2.0/vittoriadb-v0.2.0-darwin-amd64.tar.gz
+wget https://github.com/antonellof/VittoriaDB/releases/download/v0.4.0/vittoriadb-v0.4.0-darwin-amd64.tar.gz
 
 # Apple Silicon Macs
-wget https://github.com/antonellof/VittoriaDB/releases/download/v0.2.0/vittoriadb-v0.2.0-darwin-arm64.tar.gz
+wget https://github.com/antonellof/VittoriaDB/releases/download/v0.4.0/vittoriadb-v0.4.0-darwin-arm64.tar.gz
 
 # Extract and install
-tar -xzf vittoriadb-v0.2.0-darwin-*.tar.gz
-chmod +x vittoriadb-v0.2.0-darwin-*
-sudo mv vittoriadb-v0.2.0-darwin-* /usr/local/bin/vittoriadb
+tar -xzf vittoriadb-v0.4.0-darwin-*.tar.gz
+chmod +x vittoriadb-v0.4.0-darwin-*
+sudo mv vittoriadb-v0.4.0-darwin-* /usr/local/bin/vittoriadb
 ```
 
 ### Windows
@@ -132,13 +132,13 @@ sudo mv vittoriadb-v0.2.0-darwin-* /usr/local/bin/vittoriadb
 #### PowerShell Installation
 ```powershell
 # Download and extract
-Invoke-WebRequest -Uri "https://github.com/antonellof/VittoriaDB/releases/download/v0.2.0/vittoriadb-v0.2.0-windows-amd64.zip" -OutFile "vittoriadb.zip"
+Invoke-WebRequest -Uri "https://github.com/antonellof/VittoriaDB/releases/download/v0.4.0/vittoriadb-v0.4.0-windows-amd64.zip" -OutFile "vittoriadb.zip"
 Expand-Archive -Path "vittoriadb.zip" -DestinationPath "."
-.\vittoriadb-v0.2.0-windows-amd64.exe run
+.\vittoriadb-v0.4.0-windows-amd64.exe run
 ```
 
 #### Manual Installation
-1. Download `vittoriadb-v0.2.0-windows-amd64.zip`
+1. Download `vittoriadb-v0.4.0-windows-amd64.zip`
 2. Extract to desired location
 3. Add to PATH (optional)
 4. Run `vittoriadb.exe run`

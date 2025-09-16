@@ -4,7 +4,7 @@ This guide covers VittoriaDB's performance characteristics, optimization strateg
 
 ## 📊 Performance Overview
 
-### Benchmarks (v0.2.0)
+### Benchmarks (v0.4.0)
 - **Insert Speed**: >2.6M vectors/second (HNSW, small datasets), >1.7M vectors/second (large datasets)
 - **Search Speed**: <1ms for small datasets (HNSW), sub-millisecond latency for optimized queries
 - **Memory Usage**: Linear scaling - 1MB for 1K vectors, 167MB for 50K vectors (768 dimensions)
