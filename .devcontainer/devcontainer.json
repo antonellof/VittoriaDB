@@ -1,0 +1,11 @@
+{
+	"name": "VittoriaDB",
+	"image": "mcr.microsoft.com/devcontainers/go:1-1.24-bookworm",
+	"features": {
+		"ghcr.io/devcontainers/features/python:1": {
+			"installTools": true,
+			"version": "3.7"
+		}
+	},
+	"postCreateCommand": "sh ./.devcontainer/postCreateCommand.sh"
+}
