@@ -215,3 +215,26 @@
   50% { opacity: 1; }
   100% { opacity: 0.3; }
 }
+
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+@keyframes thinking-dots-animation {
+  0% { content: "."; }
+  33% { content: ".."; }
+  66% { content: "..."; }
+  100% { content: "."; }
+}
+
+@layer utilities {
+  .animate-thinking-pulse {
+    animation: thinking-pulse 2s ease-in-out infinite;
+  }
+  
+  .animate-thinking-dots::after {
+    content: ".";
+    animation: thinking-dots-animation 1.5s steps(1) infinite;
+  }
+}

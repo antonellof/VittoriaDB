@@ -120,6 +120,15 @@ type MessageType = {
         url?: string
         type?: 'web_search' | 'knowledge_base'
         favicon?: string
+        status?: 'pending' | 'reading' | 'complete' | 'error'
+        message?: string
+        from_cache?: boolean
+        features?: {
+          has_structured_data?: boolean
+          has_markdown?: boolean
+          links_found?: number
+          media_found?: number
+        }
       }>
     }>
   }
@@ -1129,9 +1138,9 @@ export default function Home() {
                               {message.reasoning && (
                                 <div className="not-prose max-w-prose space-y-4 mb-6">
                                   {message.isReasoningStreaming && (
-                                    <div className="flex w-full items-center gap-2 text-muted-foreground text-sm">
+                                    <div className="flex w-full items-center gap-2 text-muted-foreground text-sm animate-thinking-pulse">
                                       <Brain className="size-4" />
-                                      <span className="flex-1 text-left">Thinking...</span>
+                                      <span className="flex-1 text-left">Thinking<span className="animate-thinking-dots"></span></span>
                                     </div>
                                   )}
                                   <div className="space-y-3">
@@ -1148,7 +1157,26 @@ export default function Home() {
                                               {step.searchResults.map((result, resultIndex) => (
                                                 <div key={resultIndex} className="flex items-start gap-2">
                                                   {result.type === 'web_search' ? (
-                                                    <div className="flex items-center gap-2 p-2 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 min-w-0 flex-1">
+                                                    <div className={`flex items-center gap-2 p-2 rounded-md min-w-0 flex-1 ${
+                                                      result.status === 'complete' ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800' :
+                                                      result.status === 'error' ? 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800' :
+                                                      result.status === 'reading' ? 'bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800' :
+                                                      'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800'
+                                                    }`}>
+                                                      {/* Status indicator */}
+                                                      {result.status === 'reading' && (
+                                                        <div className="w-3 h-3 animate-spin rounded-full border border-yellow-600 border-t-transparent flex-shrink-0"></div>
+                                                      )}
+                                                      {result.status === 'complete' && (
+                                                        <div className="w-3 h-3 rounded-full bg-green-600 flex-shrink-0"></div>
+                                                      )}
+                                                      {result.status === 'error' && (
+                                                        <div className="w-3 h-3 rounded-full bg-red-600 flex-shrink-0"></div>
+                                                      )}
+                                                      {result.status === 'pending' && (
+                                                        <div className="w-3 h-3 rounded-full bg-gray-400 flex-shrink-0"></div>
+                                                      )}
+                                                      
                                                       {result.favicon && (
                                                         <img 
                                                           src={result.favicon} 
@@ -1159,15 +1187,51 @@ export default function Home() {
                                                           }}
                                                         />
                                                       )}
-                                                      <ExternalLink className="w-3 h-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                                                      <a 
-                                                        href={result.url} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="text-sm text-blue-700 dark:text-blue-300 hover:underline truncate"
-                                                      >
-                                                        {result.title || result.url || `Web Result ${resultIndex + 1}`}
-                                                      </a>
+                                                      <ExternalLink className={`w-3 h-3 flex-shrink-0 ${
+                                                        result.status === 'complete' ? 'text-green-600 dark:text-green-400' :
+                                                        result.status === 'error' ? 'text-red-600 dark:text-red-400' :
+                                                        result.status === 'reading' ? 'text-yellow-600 dark:text-yellow-400' :
+                                                        'text-blue-600 dark:text-blue-400'
+                                                      }`} />
+                                                      
+                                                      <div className="flex-1 min-w-0">
+                                                        <a 
+                                                          href={result.url} 
+                                                          target="_blank" 
+                                                          rel="noopener noreferrer"
+                                                          className={`text-sm hover:underline truncate block ${
+                                                            result.status === 'complete' ? 'text-green-700 dark:text-green-300' :
+                                                            result.status === 'error' ? 'text-red-700 dark:text-red-300' :
+                                                            result.status === 'reading' ? 'text-yellow-700 dark:text-yellow-300' :
+                                                            'text-blue-700 dark:text-blue-300'
+                                                          }`}
+                                                        >
+                                                          {result.title || result.url || `Web Result ${resultIndex + 1}`}
+                                                        </a>
+                                                        
+                                                        {/* Status message */}
+                                                        {result.message && (
+                                                          <div className={`text-xs mt-1 ${
+                                                            result.status === 'complete' ? 'text-green-600 dark:text-green-400' :
+                                                            result.status === 'error' ? 'text-red-600 dark:text-red-400' :
+                                                            result.status === 'reading' ? 'text-yellow-600 dark:text-yellow-400' :
+                                                            'text-blue-600 dark:text-blue-400'
+                                                          }`}>
+                                                            {result.message}
+                                                          </div>
+                                                        )}
+                                                        
+                                                        {/* Features info for completed results */}
+                                                        {result.status === 'complete' && result.features && (
+                                                          <div className="text-xs text-green-600 dark:text-green-400 mt-1 flex gap-2">
+                                                            {result.from_cache && <span>♻️ Cached</span>}
+                                                            {result.features.has_structured_data && <span>📊 Data</span>}
+                                                            {result.features.has_markdown && <span>📝 Formatted</span>}
+                                                            {result.features.links_found && result.features.links_found > 0 && <span>🔗 {result.features.links_found} links</span>}
+                                                            {result.features.media_found && result.features.media_found > 0 && <span>🖼️ {result.features.media_found} images</span>}
+                                                          </div>
+                                                        )}
+                                                      </div>
                                                     </div>
                                                   ) : (
                                                     <div className="flex items-center gap-2 p-2 rounded-md bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 min-w-0 flex-1">
@@ -1234,9 +1298,9 @@ export default function Home() {
                     <Message from="assistant">
                       <div>
                         <div className="not-prose max-w-prose space-y-4">
-                          <div className="flex w-full items-center gap-2 text-muted-foreground text-sm">
+                          <div className="flex w-full items-center gap-2 text-muted-foreground text-sm animate-thinking-pulse">
                             <Brain className="size-4" />
-                            <span className="flex-1 text-left">Thinking...</span>
+                            <span className="flex-1 text-left">Thinking<span className="animate-thinking-dots"></span></span>
                           </div>
                           <div className="space-y-3">
                             <ChainOfThoughtStep

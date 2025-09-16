@@ -24,11 +24,15 @@ from rag_system import get_rag_system, SearchResult
 from rag_engine import VittoriaRAGEngine
 from file_processor import get_file_processor
 from web_research import get_web_researcher
+from web_research_crawl4ai import AdvancedWebResearcher, research_with_crawl4ai
 from github_indexer import get_github_indexer
 from notification_system import get_notification_service
 
 # Load environment variables
 load_dotenv()
+
+# Fix tokenizers multiprocessing warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Configure structured logging
 structlog.configure(
@@ -56,12 +60,13 @@ rag_system = None
 rag_engine = None
 file_processor = None
 web_researcher = None
+advanced_web_researcher = None
 github_indexer = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    global rag_system, rag_engine, file_processor, web_researcher, github_indexer, notification_service
+    global rag_system, rag_engine, file_processor, web_researcher, advanced_web_researcher, github_indexer, notification_service
     
     logger.info("🚀 Starting VittoriaDB RAG API")
     
@@ -114,6 +119,7 @@ async def lifespan(app: FastAPI):
         
         file_processor = get_file_processor()
         web_researcher = get_web_researcher()
+        advanced_web_researcher = AdvancedWebResearcher(max_results=3, max_content_length=2000)
         github_indexer = get_github_indexer()
         notification_service = get_notification_service()
         
@@ -166,6 +172,74 @@ class ConnectionManager:
         await websocket.send_text(json.dumps(message))
 
 manager = ConnectionManager()
+
+def estimate_tokens(text: str) -> int:
+    """Rough token estimation (1 token ≈ 4 characters for English)"""
+    return len(text) // 4
+
+def truncate_for_model(context_text: str, system_prompt: str, user_message: str, model: str) -> str:
+    """Intelligently truncate context to fit model limits"""
+    # Model context limits
+    model_limits = {
+        "gpt-3.5-turbo": 4096,
+        "gpt-4": 8192,
+        "gpt-4-turbo": 128000,
+        "gpt-4o": 128000,
+        "gpt-4o-mini": 128000
+    }
+    
+    max_tokens = model_limits.get(model, 8192)
+    
+    # Reserve tokens for system prompt, user message, and response
+    system_tokens = estimate_tokens(system_prompt)
+    user_tokens = estimate_tokens(user_message)
+    response_tokens = 1500  # Reserve for response
+    
+    available_tokens = max_tokens - system_tokens - user_tokens - response_tokens - 200  # Safety buffer
+    
+    if available_tokens <= 0:
+        return "[Context too large for model]"
+    
+    max_context_chars = available_tokens * 4
+    
+    if len(context_text) > max_context_chars:
+        truncated = context_text[:max_context_chars]
+        # Try to end at a complete section
+        last_section = truncated.rfind("----")
+        if last_section > max_context_chars * 0.8:  # If we can keep 80% of content
+            truncated = truncated[:last_section + 4]
+        
+        return truncated + "\n\n[Content truncated to fit model limits]"
+    
+    return context_text
+
+async def get_health_status():
+    """Get health status for internal use (JSON serializable)"""
+    try:
+        # Check VittoriaDB connection
+        vittoriadb_connected = rag_system is not None
+        if vittoriadb_connected:
+            try:
+                rag_system.get_collection_stats()
+            except:
+                vittoriadb_connected = False
+        
+        # Check OpenAI configuration
+        openai_configured = bool(os.getenv('OPENAI_API_KEY'))
+        
+        return {
+            "status": "healthy" if vittoriadb_connected else "degraded",
+            "vittoriadb_connected": vittoriadb_connected,
+            "openai_configured": openai_configured,
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error("Health status check failed", error=str(e))
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": time.time()
+        }
 
 # Health check endpoint
 @app.get("/health", response_model=HealthResponse)
@@ -310,6 +384,7 @@ async def advanced_rag_stream(request: ChatRequest):
             should_research = request.web_search
             
             web_search_results = []
+            web_search_content = []  # Store actual content for immediate use
             
             if should_research:
                 # Add web search step
@@ -324,8 +399,8 @@ async def advanced_rag_stream(request: ChatRequest):
                 await asyncio.sleep(0.001)
                 
                 try:
-                    # Stream web research results as they're found
-                    async for progress in web_researcher.stream_research_and_store(
+                    # Stream web research results using Crawl4AI with duplicate detection
+                    async for progress in advanced_web_researcher.stream_research_and_store(
                         query=request.message,
                         rag_system=rag_system
                     ):
@@ -338,15 +413,66 @@ async def advanced_rag_stream(request: ChatRequest):
                                     'title': result['title'], 
                                     'url': result['url'],
                                     'type': 'web_search',
+                                    'status': 'pending',
                                     'favicon': f"https://www.google.com/s2/favicons?domain={result['url']}"
                                 }
                                 for result in progress['results']
                             ]
                             yield f"data: {json.dumps({'type': 'reasoning_update', 'steps': thinking_steps})}\n\n"
                             await asyncio.sleep(0.001)
+                        elif progress['type'] == 'progress':
+                            # Update specific URL status to "reading"
+                            if web_search_step.get('searchResults'):
+                                for result in web_search_step['searchResults']:
+                                    if result['url'] == progress.get('url'):
+                                        result['status'] = 'reading'
+                                        result['message'] = progress['message']
+                                        break
+                            web_search_step['label'] = progress['message']
+                            yield f"data: {json.dumps({'type': 'reasoning_update', 'steps': thinking_steps})}\n\n"
+                            await asyncio.sleep(0.001)
+                        elif progress['type'] == 'stored':
+                            # Update specific URL status to "complete" and collect content
+                            if web_search_step.get('searchResults'):
+                                for result in web_search_step['searchResults']:
+                                    if result['url'] == progress.get('url'):
+                                        result['status'] = 'complete'
+                                        result['message'] = progress['message']
+                                        result['features'] = progress.get('features', {})
+                                        break
+                            
+                            # Store the web search content for immediate LLM use
+                            if progress.get('content'):
+                                web_search_content.append({
+                                    'title': progress.get('title', 'Web Result'),
+                                    'url': progress.get('url', ''),
+                                    'content': progress.get('content', ''),
+                                    'features': progress.get('features', {}),
+                                    'from_cache': progress.get('from_cache', False)
+                                })
+                            
+                            # Update frontend with cache status
+                            if web_search_step.get('searchResults'):
+                                for result in web_search_step['searchResults']:
+                                    if result['url'] == progress.get('url'):
+                                        result['from_cache'] = progress.get('from_cache', False)
+                                        break
+                            
+                            yield f"data: {json.dumps({'type': 'reasoning_update', 'steps': thinking_steps})}\n\n"
+                            await asyncio.sleep(0.001)
+                        elif progress['type'] == 'warning':
+                            # Update specific URL status to "error"
+                            if web_search_step.get('searchResults'):
+                                for result in web_search_step['searchResults']:
+                                    if result['url'] == progress.get('url'):
+                                        result['status'] = 'error'
+                                        result['message'] = progress['message']
+                                        break
+                            yield f"data: {json.dumps({'type': 'reasoning_update', 'steps': thinking_steps})}\n\n"
+                            await asyncio.sleep(0.001)
                         elif progress['type'] == 'complete':
                             web_search_step['status'] = 'complete'
-                            web_search_step['label'] = f"Completed: {progress['total_results']} web results stored"
+                            web_search_step['label'] = f"Completed: {progress['total_results']} pages read"
                             yield f"data: {json.dumps({'type': 'reasoning_update', 'steps': thinking_steps})}\n\n"
                             await asyncio.sleep(0.001)
                         elif progress['type'] == 'error':
@@ -372,34 +498,142 @@ async def advanced_rag_stream(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'reasoning_update', 'steps': thinking_steps})}\n\n"
             await asyncio.sleep(0.001)
             
-            # Use the advanced RAG engine for streaming response
-            async for chunk in rag_engine.stream_rag_response(
-                query=request.message,
-                search_limit=request.search_limit,
-                min_score=0.3,  # Improved minimum score for better relevance
-                model=request.model
-            ):
-                if chunk['type'] == 'search_complete':
-                    # Update knowledge base search step with results
-                    kb_search_step['status'] = 'complete'
-                    kb_search_step['label'] = f"Found {len(chunk.get('sources', []))} relevant sources"
-                    
-                    if chunk.get('sources'):
-                        kb_search_step['searchResults'] = [
-                            {
-                                'title': source['chunk']['document_title'],
-                                'url': f"Score: {source['score']:.3f}",
-                                'type': 'knowledge_base'
-                            }
-                            for source in chunk['sources']
-                        ]
-                    
-                    yield f"data: {json.dumps({'type': 'reasoning_complete', 'steps': thinking_steps})}\n\n"
-                    await asyncio.sleep(0.001)
+            # Search existing knowledge base
+            try:
+                # Use model with larger context window (define early)
+                model_to_use = "gpt-4o" if request.model in ["gpt-4", "gpt-3.5-turbo"] else request.model
                 
-                # Forward other chunk types
-                yield f"data: {json.dumps(chunk)}\n\n"
+                db_search_results = await rag_engine.search(
+                    query=request.message,
+                    limit=request.search_limit,
+                    min_score=0.3
+                )
+                
+                # Update knowledge base search step
+                kb_search_step['status'] = 'complete'
+                kb_search_step['label'] = f"Found {len(db_search_results)} relevant sources"
+                
+                if db_search_results:
+                    kb_search_step['searchResults'] = [
+                        {
+                            'title': result.chunk.document_title,
+                            'url': f"Score: {result.score:.3f}",
+                            'type': 'knowledge_base'
+                        }
+                        for result in db_search_results
+                    ]
+                
+                yield f"data: {json.dumps({'type': 'reasoning_complete', 'steps': thinking_steps})}\n\n"
                 await asyncio.sleep(0.001)
+                
+                # Combine web search content with database results
+                combined_context = []
+                
+                # Add fresh web search results first (highest priority) - truncated for context
+                for i, web_result in enumerate(web_search_content[:2]):  # Limit to 2 fresh results
+                    combined_context.append(f"""
+🌐 WEB SEARCH (FRESH): {web_result['title']}
+URL: {web_result['url']}
+Content: {web_result['content'][:800]}...
+Features: {web_result.get('features', {})}
+----""")
+                
+                # Add existing database results - truncated
+                for result in db_search_results[:2]:  # Limit to top 2 DB results
+                    source_collection = result.chunk.metadata.get('source_collection', 'unknown')
+                    if source_collection == 'web_research':
+                        source_type = "🌐 WEB SEARCH (STORED)"
+                        source_url = result.chunk.metadata.get('url', '')
+                        url_info = f" | URL: {source_url}" if source_url else ""
+                    elif source_collection == 'documents':
+                        source_type = "📄 UPLOADED DOCUMENT"
+                        url_info = ""
+                    else:
+                        source_type = "📚 KNOWLEDGE BASE"
+                        url_info = ""
+                    
+                    combined_context.append(f"""
+{source_type}: {result.chunk.document_title}
+Relevance: {result.score:.3f}{url_info}
+Content: {result.chunk.content[:600]}...
+----""")
+                
+                # Create enhanced system prompt with combined context
+                context_text = "\n".join(combined_context)
+                
+                # Smart truncation based on model limits
+                base_system_prompt = """You are VittoriaDB Assistant with LIVE web search and database access.
+
+🔍 **CURRENT CAPABILITIES:**
+- **Fresh Web Search**: I just performed live web searches with current information
+- **Knowledge Database**: I have access to stored documents and previous research
+- **Current Date**: {time.strftime('%B %d, %Y')} - Today's information available!
+
+🚨 **CRITICAL INSTRUCTIONS:**
+1. **PRIORITIZE FRESH WEB RESULTS**: Use the "🌐 WEB SEARCH (FRESH)" results first - they contain TODAY'S information
+2. **USE ALL PROVIDED CONTEXT**: Combine fresh web results with stored knowledge
+3. **NO TRAINING DATA**: Answer using ONLY the context provided below
+4. **BE COMPREHENSIVE**: Synthesize information from multiple sources when available
+5. **Source Attribution**: Reference the sources and their relevance scores
+
+🌐 **RETRIEVED CONTEXT** (Retrieved {time.strftime('%B %d, %Y at %H:%M')}):
+{context_placeholder}
+
+⚡ **Remember**: You have FRESH web search results AND stored knowledge. Use both to provide comprehensive, up-to-date answers!"""
+                
+                context_text = truncate_for_model(context_text, base_system_prompt, request.message, model_to_use)
+                
+                if context_text:
+                    system_prompt = f"""You are VittoriaDB Assistant with LIVE web search and database access.
+
+🔍 **CURRENT CAPABILITIES:**
+- **Fresh Web Search**: I just performed live web searches with current information
+- **Knowledge Database**: I have access to stored documents and previous research
+- **Current Date**: {time.strftime('%B %d, %Y')} - Today's information available!
+
+🚨 **CRITICAL INSTRUCTIONS:**
+1. **PRIORITIZE FRESH WEB RESULTS**: Use the "🌐 WEB SEARCH (FRESH)" results first - they contain TODAY'S information
+2. **USE ALL PROVIDED CONTEXT**: Combine fresh web results with stored knowledge
+3. **NO TRAINING DATA**: Answer using ONLY the context provided below
+4. **BE COMPREHENSIVE**: Synthesize information from multiple sources when available
+5. **Source Attribution**: Reference the sources and their relevance scores
+
+🌐 **RETRIEVED CONTEXT** (Retrieved {time.strftime('%B %d, %Y at %H:%M')}):
+{context_text}
+
+⚡ **Remember**: You have FRESH web search results AND stored knowledge. Use both to provide comprehensive, up-to-date answers!"""
+                else:
+                    system_prompt = """You are VittoriaDB Assistant. No relevant information was found in either fresh web search results or the knowledge database for this query. Please suggest alternative search terms or ask the user to be more specific."""
+                
+                # Stream LLM response with combined context
+                yield f"data: {json.dumps({'type': 'llm_start', 'message': 'Generating response with fresh web data...'})}\n\n"
+                
+                if not rag_engine.openai_client:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'OpenAI not configured'})}\n\n"
+                    return
+                
+                stream_response = await rag_engine.openai_client.chat.completions.create(
+                    model=model_to_use,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": request.message}
+                    ],
+                    temperature=0.7,
+                    max_tokens=1500,
+                    stream=True
+                )
+                
+                # Stream the response
+                async for chunk in stream_response:
+                    if chunk.choices[0].delta.content:
+                        yield f"data: {json.dumps({'type': 'content', 'content': chunk.choices[0].delta.content})}\n\n"
+                        await asyncio.sleep(0.001)
+                
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                
+            except Exception as e:
+                logger.error("RAG streaming error", error=str(e))
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
                 
         except Exception as e:
             logger.error("Advanced RAG streaming error", error=str(e))
@@ -525,7 +759,7 @@ Content: {result.content}
             # Start OpenAI streaming with context
             yield f"data: {json.dumps({'type': 'search_progress', 'message': '🤖 Generating response...'})}\n\n"
             
-            stream_response = rag_system.openai_client.chat.completions.create(
+            stream_response = await rag_system.openai_client.chat.completions.create(
                 model=request.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -538,7 +772,7 @@ Content: {result.content}
             
             # Stream OpenAI response immediately while search happens in background
             response_chunks = []
-            for chunk in stream_response:
+            async for chunk in stream_response:
                 if chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
                     response_chunks.append(content)
@@ -612,11 +846,63 @@ async def websocket_chat(websocket: WebSocket):
                         "content": "🔍 Researching on the web..."
                     }, websocket)
                     
-                    # Perform web research
-                    research_result = await web_researcher.research_and_store(
+                    # Perform web research with Crawl4AI
+                    research_results = await advanced_web_researcher.research_query(
                         query=request.message,
-                        rag_system=rag_system
+                        search_engine='duckduckgo',
+                        scrape_content=True,
+                        extraction_strategy='cosine'
                     )
+                    
+                    # Store results
+                    stored_count = 0
+                    for result in research_results:
+                        try:
+                            # Create enhanced content
+                            content_parts = [result.content]
+                            if result.structured_data:
+                                content_parts.append(f"\n\n**Structured Data:**\n{str(result.structured_data)}")
+                            if result.markdown_content:
+                                content_parts.append(f"\n\n**Markdown Content:**\n{result.markdown_content[:1000]}...")
+                            if result.links:
+                                links_text = "\n".join([f"- [{link['text']}]({link['url']})" for link in result.links[:5]])
+                                content_parts.append(f"\n\n**Related Links:**\n{links_text}")
+                            
+                            enhanced_content = "\n".join(content_parts)
+                            
+                            metadata = {
+                                'type': 'web_research_crawl4ai',
+                                'title': result.title,
+                                'document_title': result.title,
+                                'url': result.url,
+                                'source': result.source,
+                                'source_collection': 'web_search',
+                                'query': request.message,
+                                'timestamp': result.timestamp,
+                                'content_length': len(result.content),
+                                'has_structured_data': bool(result.structured_data),
+                                'has_markdown': bool(result.markdown_content),
+                                'links_count': len(result.links) if result.links else 0,
+                                'media_count': len(result.media) if result.media else 0,
+                                'extraction_method': 'crawl4ai_cosine'
+                            }
+                            
+                            await rag_system.add_document(
+                                content=enhanced_content,
+                                metadata=metadata,
+                                collection_name='web_research'
+                            )
+                            stored_count += 1
+                        except Exception as e:
+                            logger.error(f"Failed to store result {result.url}: {e}")
+                            continue
+                    
+                    research_result = {
+                        'success': True,
+                        'results_count': len(research_results),
+                        'stored_count': stored_count,
+                        'message': f'Crawl4AI research completed: {stored_count} enhanced results stored'
+                    }
                     
                     if research_result['success']:
                         await manager.send_personal_message({
@@ -864,12 +1150,124 @@ async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File
         logger.error("File upload failed", filename=file.filename, error=str(e))
         raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
-# Web research endpoint
+# Main web research endpoint (now using Crawl4AI)
 @app.post("/research", response_model=WebResearchResponse)
 async def web_research(request: WebResearchRequest, background_tasks: BackgroundTasks):
-    """Perform web research and store results"""
+    """Perform web research using Crawl4AI and store results"""
     try:
-        logger.info("Starting web research", query=request.query)
+        logger.info("🚀 Starting web research with Crawl4AI", query=request.query)
+        
+        # Perform research with Crawl4AI
+        search_results = await advanced_web_researcher.research_query(
+            query=request.query,
+            search_engine=request.search_engine,
+            scrape_content=True,
+            extraction_strategy='cosine'  # Use semantic extraction
+        )
+        
+        if not search_results:
+            return WebResearchResponse(
+                success=False,
+                message="No results found",
+                results_count=0,
+                results=[],
+                stored_count=0,
+                stored_ids=[]
+            )
+        
+        # Store results in RAG system
+        stored_ids = []
+        for result in search_results:
+            try:
+                # Create enhanced content with Crawl4AI data
+                content_parts = [result.content]
+                
+                if result.structured_data:
+                    content_parts.append(f"\n\n**Structured Data:**\n{str(result.structured_data)}")
+                
+                if result.markdown_content:
+                    content_parts.append(f"\n\n**Markdown Content:**\n{result.markdown_content[:1000]}...")
+                
+                if result.links:
+                    links_text = "\n".join([f"- [{link['text']}]({link['url']})" for link in result.links[:5]])
+                    content_parts.append(f"\n\n**Related Links:**\n{links_text}")
+                
+                enhanced_content = "\n".join(content_parts)
+                
+                # Enhanced metadata with Crawl4AI features
+                metadata = {
+                    'type': 'web_research_crawl4ai',
+                    'title': result.title,
+                    'document_title': result.title,
+                    'url': result.url,
+                    'source': result.source,
+                    'source_collection': 'web_search',
+                    'query': request.query,
+                    'timestamp': result.timestamp,
+                    'content_length': len(result.content),
+                    'has_structured_data': bool(result.structured_data),
+                    'has_markdown': bool(result.markdown_content),
+                    'links_count': len(result.links) if result.links else 0,
+                    'media_count': len(result.media) if result.media else 0,
+                    'extraction_method': 'crawl4ai_cosine'
+                }
+                
+                # Store in web_research collection
+                doc_id = await rag_system.add_document(
+                    content=enhanced_content,
+                    metadata=metadata,
+                    collection_name='web_research'
+                )
+                
+                stored_ids.append(doc_id)
+                logger.info(f"✅ Stored Crawl4AI result: {result.title[:50]}...")
+                
+            except Exception as e:
+                logger.error(f"Failed to store result {result.url}: {e}")
+                continue
+        
+        # Convert results for response
+        response_results = []
+        for result in search_results:
+            response_results.append({
+                'title': result.title,
+                'url': result.url,
+                'snippet': result.snippet,
+                'content_preview': result.content[:200] + "..." if len(result.content) > 200 else result.content,
+                'source': result.source,
+                'timestamp': result.timestamp,
+                'enhanced_features': {
+                    'has_structured_data': bool(result.structured_data),
+                    'has_markdown': bool(result.markdown_content),
+                    'links_found': len(result.links) if result.links else 0,
+                    'media_found': len(result.media) if result.media else 0
+                }
+            })
+        
+        logger.info("✅ Web research completed with Crawl4AI", 
+                   query=request.query,
+                   results_count=len(search_results),
+                   stored_count=len(stored_ids))
+        
+        return WebResearchResponse(
+            success=True,
+            message=f"Web research completed with Crawl4AI. Found {len(search_results)} results, stored {len(stored_ids)} successfully.",
+            results_count=len(search_results),
+            results=response_results,
+            stored_count=len(stored_ids),
+            stored_ids=stored_ids
+        )
+        
+    except Exception as e:
+        logger.error("Web research failed", query=request.query, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Web research failed: {str(e)}")
+
+# Legacy web research endpoint (BeautifulSoup)
+@app.post("/research/legacy", response_model=WebResearchResponse)
+async def legacy_web_research(request: WebResearchRequest, background_tasks: BackgroundTasks):
+    """Legacy web research using BeautifulSoup (for fallback/comparison)"""
+    try:
+        logger.info("Starting legacy web research", query=request.query)
         
         result = await web_researcher.research_and_store(
             query=request.query,
@@ -877,15 +1275,127 @@ async def web_research(request: WebResearchRequest, background_tasks: Background
             search_engine=request.search_engine
         )
         
-        logger.info("Web research completed", 
+        logger.info("Legacy web research completed", 
                    query=request.query,
                    results_count=result.get('results_count', 0))
         
         return WebResearchResponse(**result)
         
     except Exception as e:
-        logger.error("Web research failed", query=request.query, error=str(e))
-        raise HTTPException(status_code=500, detail=f"Web research failed: {str(e)}")
+        logger.error("Legacy web research failed", query=request.query, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Legacy web research failed: {str(e)}")
+
+# Alternative Crawl4AI endpoint (for testing different strategies)
+@app.post("/research/crawl4ai", response_model=WebResearchResponse)
+async def advanced_web_research(request: WebResearchRequest, background_tasks: BackgroundTasks):
+    """Perform advanced web research using Crawl4AI and store results"""
+    try:
+        logger.info("🚀 Starting advanced web research with Crawl4AI", query=request.query)
+        
+        # Perform research with Crawl4AI
+        search_results = await advanced_web_researcher.research_query(
+            query=request.query,
+            search_engine=request.search_engine,
+            scrape_content=True,
+            extraction_strategy='cosine'  # Use semantic extraction
+        )
+        
+        if not search_results:
+            return WebResearchResponse(
+                success=False,
+                message="No results found",
+                results_count=0,
+                results=[],
+                stored_count=0,
+                stored_ids=[]
+            )
+        
+        # Store results in RAG system
+        stored_ids = []
+        for result in search_results:
+            try:
+                # Create enhanced content with Crawl4AI data
+                content_parts = [result.content]
+                
+                if result.structured_data:
+                    content_parts.append(f"\n\n**Structured Data:**\n{str(result.structured_data)}")
+                
+                if result.markdown_content:
+                    content_parts.append(f"\n\n**Markdown Content:**\n{result.markdown_content[:1000]}...")
+                
+                if result.links:
+                    links_text = "\n".join([f"- [{link['text']}]({link['url']})" for link in result.links[:5]])
+                    content_parts.append(f"\n\n**Related Links:**\n{links_text}")
+                
+                enhanced_content = "\n".join(content_parts)
+                
+                # Enhanced metadata with Crawl4AI features
+                metadata = {
+                    'type': 'web_research_crawl4ai',
+                    'title': result.title,
+                    'document_title': result.title,
+                    'url': result.url,
+                    'source': result.source,
+                    'source_collection': 'web_search',
+                    'query': request.query,
+                    'timestamp': result.timestamp,
+                    'content_length': len(result.content),
+                    'has_structured_data': bool(result.structured_data),
+                    'has_markdown': bool(result.markdown_content),
+                    'links_count': len(result.links) if result.links else 0,
+                    'media_count': len(result.media) if result.media else 0,
+                    'extraction_method': 'crawl4ai_cosine'
+                }
+                
+                # Store in web_research collection
+                doc_id = await rag_system.add_document(
+                    content=enhanced_content,
+                    metadata=metadata,
+                    collection_name='web_research'
+                )
+                
+                stored_ids.append(doc_id)
+                logger.info(f"✅ Stored Crawl4AI result: {result.title[:50]}...")
+                
+            except Exception as e:
+                logger.error(f"Failed to store result {result.url}: {e}")
+                continue
+        
+        # Convert results for response
+        response_results = []
+        for result in search_results:
+            response_results.append({
+                'title': result.title,
+                'url': result.url,
+                'snippet': result.snippet,
+                'content_preview': result.content[:200] + "..." if len(result.content) > 200 else result.content,
+                'source': result.source,
+                'timestamp': result.timestamp,
+                'enhanced_features': {
+                    'has_structured_data': bool(result.structured_data),
+                    'has_markdown': bool(result.markdown_content),
+                    'links_found': len(result.links) if result.links else 0,
+                    'media_found': len(result.media) if result.media else 0
+                }
+            })
+        
+        logger.info("✅ Advanced web research completed", 
+                   query=request.query,
+                   results_count=len(search_results),
+                   stored_count=len(stored_ids))
+        
+        return WebResearchResponse(
+            success=True,
+            message=f"Advanced research completed with Crawl4AI. Found {len(search_results)} results, stored {len(stored_ids)} successfully.",
+            results_count=len(search_results),
+            results=response_results,
+            stored_count=len(stored_ids),
+            stored_ids=stored_ids
+        )
+        
+    except Exception as e:
+        logger.error("Advanced web research failed", query=request.query, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Advanced web research failed: {str(e)}")
 
 # GitHub indexing endpoint
 @app.post("/github/index", response_model=GitHubIndexResponse)
@@ -1001,9 +1511,11 @@ async def websocket_notifications(websocket: WebSocket):
                     # Send current system stats
                     try:
                         stats = await get_system_stats()
+                        # Convert to dict for JSON serialization
+                        stats_dict = stats.dict() if hasattr(stats, 'dict') else stats.__dict__
                         await websocket.send_text(json.dumps({
                             "type": "stats_update",
-                            "data": stats,
+                            "data": stats_dict,
                             "timestamp": time.time()
                         }))
                     except Exception as e:

@@ -22,6 +22,10 @@ from typing import List, Dict, Any, Optional, Tuple, AsyncGenerator
 from pathlib import Path
 import logging
 
+# Fix tokenizers multiprocessing warning
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import vittoriadb
 from vittoriadb import DistanceMetric, IndexType, VectorizerConfig, VectorizerType
 from vittoriadb.configure import Configure
