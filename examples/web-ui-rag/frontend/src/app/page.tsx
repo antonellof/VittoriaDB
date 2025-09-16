@@ -104,7 +104,14 @@ import toast from 'react-hot-toast'
 type MessageType = {
   key: string
   from: 'user' | 'assistant'
-  sources?: { href: string; title: string }[]
+  sources?: { href: string; title: string; score?: number; source?: string }[]
+  sourcesInfo?: {
+    total_sources: number
+    displayed_sources: number
+    has_more_sources: boolean
+    is_overview_query: boolean
+  }
+  suggestions?: string[]
   versions: {
     id: string
     content: string
@@ -497,6 +504,33 @@ export default function Home() {
               } else if (data.type === 'search_progress') {
                 // Add search progress message
                 setSearchProgress(prev => [...prev, data.message])
+              } else if (data.type === 'suggestions') {
+                // Add suggestions to the assistant message
+                setMessages(prev => 
+                  prev.map(msg => 
+                    msg.key === assistantMsg.key 
+                      ? { ...msg, suggestions: data.suggestions }
+                      : msg
+                  )
+                )
+              } else if (data.type === 'sources') {
+                // Add sources to the assistant message
+                setMessages(prev => 
+                  prev.map(msg => 
+                    msg.key === assistantMsg.key 
+                      ? { 
+                          ...msg, 
+                          sources: data.sources,
+                          sourcesInfo: {
+                            total_sources: data.total_sources || 0,
+                            displayed_sources: data.displayed_sources || 0,
+                            has_more_sources: data.has_more_sources || false,
+                            is_overview_query: data.is_overview_query || false
+                          }
+                        }
+                      : msg
+                  )
+                )
               } else if (data.type === 'content') {
                 // Update assistant message content with immediate flush
                 flushSync(() => {
@@ -1193,6 +1227,7 @@ export default function Home() {
                           <Message
                             from={message.from}
                             key={`${message.key}-${version.id}`}
+                            className="message-container"
                           >
                             <div>
                               {message.sources?.length && (
@@ -1348,11 +1383,35 @@ export default function Home() {
                                 <MessageContent
                                   className={cn(
                                     "group-[.is-user]:rounded-[24px] group-[.is-user]:bg-secondary group-[.is-user]:text-foreground",
-                                    "group-[.is-assistant]:bg-transparent group-[.is-assistant]:p-0 group-[.is-assistant]:text-foreground"
+                                    "group-[.is-assistant]:bg-transparent group-[.is-assistant]:p-0 group-[.is-assistant]:text-foreground",
+                                    // Only add overflow handling, don't override width constraints
+                                    "overflow-hidden"
                                   )}
                                 >
                                   <Response>{version.content}</Response>
                                 </MessageContent>
+                              )}
+                              
+                              {/* Show suggestions for assistant messages */}
+                              {message.from === 'assistant' && message.suggestions && message.suggestions.length > 0 && (
+                                <div className="mt-4">
+                                  <Suggestions>
+                                    {message.suggestions.map((suggestion, index) => (
+                                      <Suggestion
+                                        key={index}
+                                        suggestion={suggestion}
+                                        onClick={(suggestion) => {
+                                          setText(suggestion)
+                                          // Auto-submit the suggestion
+                                          setTimeout(() => {
+                                            const submitEvent = new Event('submit', { bubbles: true, cancelable: true })
+                                            document.querySelector('form')?.dispatchEvent(submitEvent)
+                                          }, 100)
+                                        }}
+                                      />
+                                    ))}
+                                  </Suggestions>
+                                </div>
                               )}
                             </div>
                           </Message>

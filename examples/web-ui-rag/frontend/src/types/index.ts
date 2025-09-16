@@ -30,11 +30,16 @@ export interface ChatResponse {
 }
 
 export interface StreamingChatResponse {
-  type: 'content' | 'sources' | 'done' | 'error' | 'typing' | 'status';
+  type: 'content' | 'sources' | 'suggestions' | 'done' | 'error' | 'typing' | 'status';
   content?: string;
   sources?: SearchResult[];
+  suggestions?: string[];
   error?: string;
   processing_time?: number;
+  total_sources?: number;
+  displayed_sources?: number;
+  has_more_sources?: boolean;
+  is_overview_query?: boolean;
 }
 
 export interface FileUploadResponse {

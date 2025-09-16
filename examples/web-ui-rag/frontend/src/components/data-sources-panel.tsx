@@ -128,7 +128,7 @@ export function DataSourcesPanel({ onClose }: DataSourcesPanelProps) {
     multiple: true
   })
 
-  // GitHub repository indexing
+  // GitHub repository indexing (now background)
   const handleGithubIndex = async () => {
     if (!githubUrl.trim()) {
       toast.error('Please enter a GitHub repository URL')
@@ -136,7 +136,6 @@ export function DataSourcesPanel({ onClose }: DataSourcesPanelProps) {
     }
 
     setIsGithubIndexing(true)
-    setCollectionUpdating('github_code', true)
 
     try {
       const response = await fetch('http://localhost:8501/github/index', {
@@ -154,15 +153,14 @@ export function DataSourcesPanel({ onClose }: DataSourcesPanelProps) {
       }
 
       const result = await response.json()
-      toast.success(`✅ Repository indexed: ${result.files_indexed} files processed`)
+      toast.success(`🚀 ${result.message}`)
       setGithubUrl('')
 
     } catch (error) {
       console.error('GitHub indexing failed:', error)
-      toast.error(`❌ Failed to index repository: ${error}`)
+      toast.error(`❌ Failed to start GitHub indexing: ${error}`)
     } finally {
       setIsGithubIndexing(false)
-      setCollectionUpdating('github_code', false)
     }
   }
 

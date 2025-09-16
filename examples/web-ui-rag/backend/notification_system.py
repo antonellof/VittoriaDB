@@ -24,6 +24,10 @@ class NotificationType(Enum):
     HEALTH_UPDATE = "health_update"
     COLLECTION_UPDATE = "collection_update"
     SYSTEM_STATUS = "system_status"
+    GITHUB_INDEXING_START = "github_indexing_start"
+    GITHUB_INDEXING_PROGRESS = "github_indexing_progress"
+    GITHUB_INDEXING_COMPLETE = "github_indexing_complete"
+    GITHUB_INDEXING_ERROR = "github_indexing_error"
 
 @dataclass
 class Notification:
@@ -224,9 +228,106 @@ class NotificationService:
             timestamp=time.time()
         ))
     
+    # GitHub indexing notifications
+    async def notify_github_indexing_start(self, repo_url: str, indexing_id: str):
+        """Notify about GitHub indexing start"""
+        self.processing_status[indexing_id] = {
+            "status": "indexing",
+            "repo_url": repo_url,
+            "progress": 0,
+            "start_time": time.time(),
+            "message": "Starting repository indexing..."
+        }
+        
+        await self.websocket_manager.broadcast(Notification(
+            type=NotificationType.GITHUB_INDEXING_START,
+            data={
+                "indexing_id": indexing_id,
+                "repo_url": repo_url,
+                "message": "Starting GitHub repository indexing..."
+            },
+            timestamp=time.time()
+        ))
+    
+    async def notify_github_indexing_progress(self, indexing_id: str, progress: int, message: str = ""):
+        """Notify about GitHub indexing progress"""
+        if indexing_id in self.processing_status:
+            self.processing_status[indexing_id]["progress"] = progress
+            self.processing_status[indexing_id]["message"] = message
+            
+            await self.websocket_manager.broadcast(Notification(
+                type=NotificationType.GITHUB_INDEXING_PROGRESS,
+                data={
+                    "indexing_id": indexing_id,
+                    "progress": progress,
+                    "message": message
+                },
+                timestamp=time.time()
+            ))
+    
+    async def notify_github_indexing_complete(self, indexing_id: str, files_indexed: int, 
+                                           repository: str, processing_time: float):
+        """Notify about GitHub indexing completion"""
+        if indexing_id in self.processing_status:
+            self.processing_status[indexing_id].update({
+                "status": "completed",
+                "progress": 100,
+                "files_indexed": files_indexed,
+                "repository": repository,
+                "processing_time": processing_time,
+                "message": f"Successfully indexed {files_indexed} files"
+            })
+            
+            await self.websocket_manager.broadcast(Notification(
+                type=NotificationType.GITHUB_INDEXING_COMPLETE,
+                data={
+                    "indexing_id": indexing_id,
+                    "files_indexed": files_indexed,
+                    "repository": repository,
+                    "processing_time": processing_time,
+                    "message": f"Successfully indexed {files_indexed} files from {repository}"
+                },
+                timestamp=time.time()
+            ))
+            
+            # Clean up after a delay
+            asyncio.create_task(self._cleanup_processing_status(indexing_id, delay=30))
+    
+    async def notify_github_indexing_error(self, indexing_id: str, error: str):
+        """Notify about GitHub indexing error"""
+        if indexing_id in self.processing_status:
+            self.processing_status[indexing_id].update({
+                "status": "error",
+                "error": error,
+                "message": f"Indexing failed: {error}"
+            })
+            
+            await self.websocket_manager.broadcast(Notification(
+                type=NotificationType.GITHUB_INDEXING_ERROR,
+                data={
+                    "indexing_id": indexing_id,
+                    "error": error,
+                    "message": f"GitHub indexing failed: {error}"
+                },
+                timestamp=time.time()
+            ))
+            
+            # Clean up after a delay
+            asyncio.create_task(self._cleanup_processing_status(indexing_id, delay=30))
+    
     def get_processing_status(self, document_id: str) -> Optional[Dict[str, Any]]:
         """Get processing status for a document"""
         return self.processing_status.get(document_id)
+    
+    async def _cleanup_processing_status(self, processing_id: str, delay: int = 30):
+        """Clean up processing status after a delay"""
+        try:
+            await asyncio.sleep(delay)
+            if processing_id in self.processing_status:
+                del self.processing_status[processing_id]
+                logger.info(f"🧹 Cleaned up processing status for {processing_id}")
+        except Exception as e:
+            logger.error(f"Failed to cleanup processing status for {processing_id}: {e}")
     
     def get_all_processing_status(self) -> Dict[str, Dict[str, Any]]:
         """Get all processing statuses"""

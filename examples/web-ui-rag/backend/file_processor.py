@@ -80,7 +80,7 @@ class FileProcessor:
         try:
             # Process file based on type
             processor = self.supported_types[file_ext]
-            content, extracted_metadata = await processor(temp_file_path)
+            content, extracted_metadata = await processor(temp_file_path, filename)
             
             # Create base metadata
             base_metadata = {
@@ -118,7 +118,7 @@ class FileProcessor:
             except:
                 pass
     
-    async def _process_pdf(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
+    async def _process_pdf(self, file_path: str, original_filename: str) -> Tuple[str, Dict[str, Any]]:
         """Process PDF file"""
         try:
             with open(file_path, 'rb') as file:
@@ -127,12 +127,12 @@ class FileProcessor:
                 # Extract metadata
                 metadata = {
                     'pages': len(pdf_reader.pages),
-                    'title': 'Unknown PDF'
+                    'title': original_filename  # Use original filename as fallback
                 }
                 
                 if pdf_reader.metadata:
                     metadata.update({
-                        'title': pdf_reader.metadata.get('/Title', 'Unknown PDF'),
+                        'title': pdf_reader.metadata.get('/Title') or original_filename,  # Use filename as fallback
                         'author': pdf_reader.metadata.get('/Author', 'Unknown'),
                         'subject': pdf_reader.metadata.get('/Subject', ''),
                         'creator': pdf_reader.metadata.get('/Creator', ''),
@@ -154,14 +154,14 @@ class FileProcessor:
             logger.error(f"Failed to process PDF: {e}")
             raise ValueError(f"Failed to process PDF file: {str(e)}")
     
-    async def _process_docx(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
+    async def _process_docx(self, file_path: str, original_filename: str) -> Tuple[str, Dict[str, Any]]:
         """Process DOCX file"""
         try:
             doc = Document(file_path)
             
             # Extract metadata
             metadata = {
-                'title': doc.core_properties.title or 'Unknown Document',
+                'title': doc.core_properties.title or original_filename,  # Use original filename as fallback
                 'author': doc.core_properties.author or 'Unknown',
                 'subject': doc.core_properties.subject or '',
                 'paragraphs': len(doc.paragraphs)
@@ -179,14 +179,14 @@ class FileProcessor:
             logger.error(f"Failed to process DOCX: {e}")
             raise ValueError(f"Failed to process DOCX file: {str(e)}")
     
-    async def _process_text(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
+    async def _process_text(self, file_path: str, original_filename: str) -> Tuple[str, Dict[str, Any]]:
         """Process plain text file"""
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
                 content = file.read()
             
             metadata = {
-                'title': os.path.basename(file_path),
+                'title': original_filename,  # Use original filename directly
                 'lines': len(content.split('\n')),
                 'words': len(content.split())
             }
@@ -210,7 +210,7 @@ class FileProcessor:
             except Exception as e:
                 raise ValueError(f"Failed to read text file: {str(e)}")
     
-    async def _process_markdown(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
+    async def _process_markdown(self, file_path: str, original_filename: str) -> Tuple[str, Dict[str, Any]]:
         """Process Markdown file"""
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
@@ -222,7 +222,7 @@ class FileProcessor:
             text_content = soup.get_text()
             
             # Extract title from first heading
-            title = os.path.basename(file_path)
+            title = original_filename  # Default to original filename
             first_heading = soup.find(['h1', 'h2', 'h3'])
             if first_heading:
                 title = first_heading.get_text().strip()
@@ -240,7 +240,7 @@ class FileProcessor:
             logger.error(f"Failed to process Markdown: {e}")
             raise ValueError(f"Failed to process Markdown file: {str(e)}")
     
-    async def _process_html(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
+    async def _process_html(self, file_path: str, original_filename: str) -> Tuple[str, Dict[str, Any]]:
         """Process HTML file"""
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
@@ -250,7 +250,7 @@ class FileProcessor:
             
             # Extract title
             title_tag = soup.find('title')
-            title = title_tag.get_text().strip() if title_tag else os.path.basename(file_path)
+            title = title_tag.get_text().strip() if title_tag else original_filename  # Use filename as fallback
             
             # Extract text content
             text_content = soup.get_text()

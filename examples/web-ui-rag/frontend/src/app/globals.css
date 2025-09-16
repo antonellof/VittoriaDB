@@ -238,3 +238,54 @@
     animation: thinking-dots-animation 1.5s steps(1) infinite;
   }
 }
+
+/* Response content overflow prevention */
+.response-content {
+  /* Prevent horizontal overflow */
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+/* HTML content specific styles */
+.response-content * {
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.response-content pre {
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.response-content code {
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.response-content table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.response-content td, .response-content th {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 0;
+}
+
+.response-content img, .response-content video {
+  max-width: 100% !important;
+  height: auto !important;
+}
+
+/* Prevent content from expanding sidebar or container */
+.message-container {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}

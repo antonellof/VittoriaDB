@@ -9,6 +9,7 @@ import logging
 import time
 import json
 import hashlib
+import re
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 
@@ -33,6 +34,44 @@ load_dotenv()
 
 # Fix tokenizers multiprocessing warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+# Overview query keywords (used across multiple endpoints)
+OVERVIEW_KEYWORDS = [
+    'what documents', 'list documents', 'show documents', 'documents do I have', 
+    'knowledge base', 'what files', 'show files', 'what content', 'overview',
+    'what information', 'what data', 'show me everything', 'all documents',
+    'contents of', 'what\'s in', 'inventory', 'catalog'
+]
+
+def extract_suggestions_from_response(response_text: str) -> List[str]:
+    """Extract suggestions from AI response text"""
+    suggestions = []
+    
+    # Look for suggestions in code blocks
+    suggestions_pattern = r'```suggestions\n(.*?)\n```'
+    match = re.search(suggestions_pattern, response_text, re.DOTALL)
+    
+    if match:
+        suggestions_text = match.group(1)
+        # Split by lines and clean up
+        for line in suggestions_text.split('\n'):
+            line = line.strip()
+            if line and not line.startswith('#') and '?' in line:
+                suggestions.append(line)
+    
+    # Fallback: look for questions ending with ?
+    if not suggestions:
+        # Look for lines that end with question marks
+        question_pattern = r'^[•\-\*]?\s*(.+\?)\s*$'
+        for line in response_text.split('\n'):
+            match = re.match(question_pattern, line.strip())
+            if match:
+                question = match.group(1).strip()
+                if len(question) > 10 and len(question) < 100:  # Reasonable length
+                    suggestions.append(question)
+    
+    # Limit to 6 suggestions and ensure they're unique
+    return list(dict.fromkeys(suggestions))[:6]
 
 # Configure structured logging
 structlog.configure(
@@ -265,6 +304,40 @@ async def health_check():
     except Exception as e:
         logger.error("Health check failed", error=str(e))
         raise HTTPException(status_code=500, detail="Health check failed")
+
+@app.get("/collections/stats")
+async def get_collection_stats():
+    """Get detailed statistics for all collections"""
+    try:
+        stats = rag_system.get_collection_stats()
+        
+        # Add more detailed information
+        detailed_stats = {
+            "total_collections": len(stats),
+            "collections": {},
+            "summary": {
+                "total_documents": 0,
+                "by_type": {}
+            }
+        }
+        
+        for collection_name, collection_info in stats.items():
+            detailed_stats["collections"][collection_name] = {
+                "document_count": collection_info.get("document_count", 0),
+                "description": rag_system.collection_configs.get(collection_name, {}).get("description", ""),
+                "dimensions": rag_system.collection_configs.get(collection_name, {}).get("dimensions", 0)
+            }
+            
+            # Add to summary
+            doc_count = collection_info.get("document_count", 0)
+            detailed_stats["summary"]["total_documents"] += doc_count
+            detailed_stats["summary"]["by_type"][collection_name] = doc_count
+        
+        return detailed_stats
+        
+    except Exception as e:
+        logger.error("Failed to get collection stats", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get collection stats: {str(e)}")
 
 # System statistics endpoint
 @app.get("/rag/stats")
@@ -503,10 +576,21 @@ async def advanced_rag_stream(request: ChatRequest):
                 # Use model with larger context window (define early)
                 model_to_use = "gpt-4o" if request.model in ["gpt-4", "gpt-3.5-turbo"] else request.model
                 
+                # Auto-adjust parameters for knowledge base overview queries
+                search_limit = request.search_limit
+                min_score = 0.3
+                
+                overview_keywords = OVERVIEW_KEYWORDS
+                
+                if any(keyword in request.message.lower() for keyword in overview_keywords):
+                    search_limit = min(10, search_limit * 10)  # Increase limit for overview queries
+                    min_score = max(0.1, min_score - 0.2)  # Lower threshold
+                    logger.info(f"🔍 Knowledge base overview query detected in advanced RAG - using limit={search_limit}, min_score={min_score}")
+                
                 db_search_results = await rag_engine.search(
                     query=request.message,
-                    limit=request.search_limit,
-                    min_score=0.3
+                    limit=search_limit,
+                    min_score=min_score
                 )
                 
                 # Update knowledge base search step
@@ -538,8 +622,9 @@ Content: {web_result['content'][:800]}...
 Features: {web_result.get('features', {})}
 ----""")
                 
-                # Add existing database results - truncated
-                for result in db_search_results[:2]:  # Limit to top 2 DB results
+                # Add existing database results - more for overview queries
+                max_db_results = min(10, len(db_search_results)) if any(keyword in request.message.lower() for keyword in overview_keywords) else 2
+                for result in db_search_results[:max_db_results]:
                     source_collection = result.chunk.metadata.get('source_collection', 'unknown')
                     if source_collection == 'web_research':
                         source_type = "🌐 WEB SEARCH (STORED)"
@@ -612,12 +697,23 @@ Content: {result.chunk.content[:600]}...
                     yield f"data: {json.dumps({'type': 'error', 'message': 'OpenAI not configured'})}\n\n"
                     return
                 
+                # Build messages array with chat history
+                messages = [{"role": "system", "content": system_prompt}]
+                
+                # Add chat history (last 10 messages to maintain context)
+                if request.chat_history:
+                    for msg in request.chat_history[-10:]:
+                        messages.append({
+                            "role": msg.role.value if hasattr(msg.role, 'value') else str(msg.role),
+                            "content": msg.content
+                        })
+                
+                # Add current user message
+                messages.append({"role": "user", "content": request.message})
+                
                 stream_response = await rag_engine.openai_client.chat.completions.create(
                     model=model_to_use,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": request.message}
-                    ],
+                    messages=messages,
                     temperature=0.7,
                     max_tokens=1500,
                     stream=True
@@ -697,11 +793,22 @@ async def chat_stream(request: ChatRequest):
                 try:
                     yield f"data: {json.dumps({'type': 'search_progress', 'message': f'🔍 Searching {len(request.search_collections)} collections...'})}\n\n"
                     
+                    # Auto-adjust parameters for knowledge base overview queries
+                    search_limit = request.search_limit
+                    min_score = 0.3
+                    
+                    overview_keywords = OVERVIEW_KEYWORDS
+                    
+                    if any(keyword in request.message.lower() for keyword in overview_keywords):
+                        search_limit = min(10, search_limit * 10)  # Increase limit for overview queries
+                        min_score = max(0.1, min_score - 0.2)  # Lower threshold
+                        logger.info(f"🔍 Knowledge base overview query detected in chat - using limit={search_limit}, min_score={min_score}")
+                    
                     search_results = await rag_system.search_knowledge_base(
                         query=request.message,
                         collections=request.search_collections,
-                        limit=request.search_limit,
-                        min_score=0.3  # Increased minimum score for better relevance
+                        limit=search_limit,
+                        min_score=min_score
                     )
                     
                     if search_results:
@@ -709,11 +816,22 @@ async def chat_stream(request: ChatRequest):
                         high_relevance = [r for r in search_results if r.score >= 0.5]
                         medium_relevance = [r for r in search_results if 0.3 <= r.score < 0.5]
                         
-                        yield f"data: {json.dumps({'type': 'search_progress', 'message': f'✅ Found {len(search_results)} relevant documents (High: {len(high_relevance)}, Medium: {len(medium_relevance)})'})}\n\n"
+                        # For overview queries, show pagination info
+                        overview_keywords = OVERVIEW_KEYWORDS
+                        is_overview_query = any(keyword in request.message.lower() for keyword in overview_keywords)
+                        
+                        if is_overview_query and len(search_results) > 10:
+                            yield f"data: {json.dumps({'type': 'search_progress', 'message': f'✅ Found {len(search_results)} relevant documents (showing first 10, {len(search_results) - 10} more available)'})}\n\n"
+                        else:
+                            yield f"data: {json.dumps({'type': 'search_progress', 'message': f'✅ Found {len(search_results)} relevant documents (High: {len(high_relevance)}, Medium: {len(medium_relevance)})'})}\n\n"
                         
                         # Build enhanced context from search results
+                        # For overview queries, show more results in context but limit sources display
+                        max_context_results = min(20, len(search_results)) if is_overview_query else min(5, len(search_results))
+                        max_sources_display = min(10, len(search_results)) if is_overview_query else len(search_results)
+                        
                         context_parts = []
-                        for i, result in enumerate(search_results[:5]):  # Use top 5 results
+                        for i, result in enumerate(search_results[:max_context_results]):
                             # Determine source type and add metadata
                             source_collection = result.metadata.get('source_collection', result.source)
                             if source_collection == 'web_research' or result.metadata.get('source') == 'web_search':
@@ -745,7 +863,90 @@ Content: {result.content}
             
             # Create system prompt with context
             if context_text:
-                system_prompt = f"""You are VittoriaDB Assistant, an AI-powered research agent with ACTIVE web search and database capabilities.
+                # Check if this is a knowledge base overview query
+                overview_keywords = OVERVIEW_KEYWORDS
+                is_overview_query = any(keyword in request.message.lower() for keyword in overview_keywords)
+                
+                if is_overview_query:
+                    # Extract key topics from the search results for better suggestions
+                    topics = set()
+                    document_types = set()
+                    for result in search_results[:20]:  # Analyze top 20 results
+                        # Extract topics from metadata
+                        if 'language' in result.metadata:
+                            topics.add(f"{result.metadata['language']} programming")
+                        if 'repository' in result.metadata:
+                            topics.add(f"{result.metadata['repository']} codebase")
+                        if 'type' in result.metadata:
+                            doc_type = result.metadata['type']
+                            document_types.add(doc_type)
+                            if doc_type == 'github_code':
+                                topics.add("code analysis")
+                            elif doc_type == 'web_research':
+                                topics.add("research findings")
+                        
+                        # Extract topics from titles
+                        title = result.metadata.get('title', result.metadata.get('document_title', ''))
+                        if title and title != 'Unknown Document':
+                            # Simple topic extraction from titles
+                            title_lower = title.lower()
+                            if any(word in title_lower for word in ['api', 'endpoint', 'service']):
+                                topics.add("API documentation")
+                            if any(word in title_lower for word in ['config', 'setup', 'install']):
+                                topics.add("configuration")
+                            if any(word in title_lower for word in ['test', 'spec', 'example']):
+                                topics.add("testing and examples")
+                    
+                    topics_list = list(topics)[:6]  # Limit to 6 main topics
+                    
+                    system_prompt = f"""You are VittoriaDB Assistant providing a comprehensive knowledge base overview with intelligent suggestions.
+
+🔍 **KNOWLEDGE BASE OVERVIEW REQUEST DETECTED**
+- **Found**: {len(search_results)} documents in your knowledge base
+- **Collections**: Documents, GitHub repositories, web research, and chat history
+- **Current Date**: {time.strftime('%B %d, %Y')} - Information is current and searchable
+
+🚨 **OVERVIEW INSTRUCTIONS:**
+1. **PROVIDE COMPREHENSIVE SUMMARY**: List and categorize all found documents by type and topic
+2. **ORGANIZE BY TYPE**: Group by document type (📄 UPLOADED DOCUMENT, 🌐 WEB SEARCH, 📚 KNOWLEDGE BASE, 💻 CODE)
+3. **INCLUDE DETAILS**: Show document titles, types, relevance scores, and brief descriptions
+4. **IDENTIFY KEY TOPICS**: Highlight main themes and subjects available
+5. **SUGGEST FOLLOW-UP QUESTIONS**: Provide specific, actionable questions for deeper exploration
+
+📚 **KNOWLEDGE BASE CONTENTS** (Retrieved {time.strftime('%B %d, %Y at %H:%M')}):
+{context_text}
+
+⚡ **REQUIRED RESPONSE FORMAT:**
+
+## 📊 Knowledge Base Summary
+- Total documents: {len(search_results)}
+- Document types: {', '.join(document_types) if document_types else 'Various'}
+- Main topics identified: {', '.join(topics_list) if topics_list else 'General content'}
+
+## 📄 Document Inventory
+[Organize documents by type with titles, brief descriptions, and relevance scores]
+
+## 🔍 Key Topics Available
+[List 4-6 main topics/themes found in the knowledge base]
+
+## 💡 Suggested Follow-up Questions
+**CRITICAL**: End your response with exactly 4-6 specific follow-up questions in this format:
+```suggestions
+What specific APIs are documented in the codebase?
+How do I configure the development environment?
+What testing frameworks are being used?
+Can you explain the main architecture components?
+What are the deployment procedures?
+Show me examples of the core functionality?
+```
+
+**Remember**: 
+- Be thorough and organized in your overview
+- Make suggestions specific and actionable
+- Always include the suggestions section at the end
+- Focus on helping users discover valuable information in their knowledge base"""
+                else:
+                    system_prompt = f"""You are VittoriaDB Assistant, an AI-powered research agent with ACTIVE web search and database capabilities.
 
 🔍 **YOUR CAPABILITIES:**
 - **Real-time Web Search**: I just performed live web searches and found current information
@@ -781,12 +982,23 @@ Content: {result.content}
             # Start OpenAI streaming with context
             yield f"data: {json.dumps({'type': 'search_progress', 'message': '🤖 Generating response...'})}\n\n"
             
+            # Build messages array with chat history
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # Add chat history (last 10 messages to maintain context)
+            if request.chat_history:
+                for msg in request.chat_history[-10:]:
+                    messages.append({
+                        "role": msg.role.value if hasattr(msg.role, 'value') else str(msg.role),
+                        "content": msg.content
+                    })
+            
+            # Add current user message
+            messages.append({"role": "user", "content": request.message})
+            
             stream_response = await rag_system.openai_client.chat.completions.create(
                 model=request.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": request.message}
-                ],
+                messages=messages,
                 temperature=0.7,
                 max_tokens=1500,
                 stream=True
@@ -800,8 +1012,39 @@ Content: {result.content}
                     response_chunks.append(content)
                     yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
             
+            # Extract suggestions from the complete response
+            full_response = ''.join(response_chunks)
+            suggestions = extract_suggestions_from_response(full_response)
+            
+            if suggestions:
+                yield f"data: {json.dumps({'type': 'suggestions', 'suggestions': suggestions})}\n\n"
+            
             # Note: Search results would be processed here in a full implementation
             # For now, we're prioritizing immediate streaming response
+            
+            # Send limited sources to frontend
+            if 'search_results' in locals() and search_results:
+                sources_to_send = search_results[:10]  # Limit to 10 sources
+                sources_data = []
+                for result in sources_to_send:
+                    title = result.metadata.get('title', result.metadata.get('document_title', 'Unknown Document'))
+                    sources_data.append({
+                        'href': f"#source-{hash(result.content) % 10000}",
+                        'title': title,
+                        'score': result.score,
+                        'source': result.source
+                    })
+                
+                # Send sources message
+                sources_message = {
+                    'type': 'sources',
+                    'sources': sources_data,
+                    'total_sources': len(search_results),
+                    'displayed_sources': len(sources_data),
+                    'has_more_sources': len(search_results) > len(sources_data),
+                    'is_overview_query': is_overview_query if 'is_overview_query' in locals() else False
+                }
+                yield f"data: {json.dumps(sources_message)}\n\n"
             
             # Send completion
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
@@ -945,7 +1188,7 @@ async def websocket_chat(websocket: WebSocket):
                     search_collections=request.search_collections
                 )
                 
-                # Convert search results
+                # Convert search results (limit to 10)
                 sources = [
                     SearchResult(
                         content=result.content,
@@ -953,7 +1196,7 @@ async def websocket_chat(websocket: WebSocket):
                         score=result.score,
                         source=result.source
                     )
-                    for result in search_results
+                    for result in search_results[:10]  # Limit to 10 sources
                 ]
                 
                 processing_time = time.time() - start_time
@@ -1058,25 +1301,68 @@ async def process_file_background(file_content: bytes, filename: str, document_i
             message="Generating embeddings..."
         )
         
-        # Store chunks in VittoriaDB (this is the slow part)
-        chunks_stored = 0
+        # Store chunks in VittoriaDB using batch operations for better performance
         total_chunks = len(processed_doc.chunks)
+        batch_size = 10  # Process chunks in batches
+        chunks_stored = 0
         
-        for i, chunk in enumerate(processed_doc.chunks):
-            await rag_system.add_document(
-                content=chunk.content,
-                metadata=chunk.metadata,
-                collection_name='documents'
-            )
-            chunks_stored += 1
+        await notification_service.notify_processing_progress(
+            document_id=document_id,
+            progress=55,
+            message=f"Preparing {total_chunks} chunks for batch processing..."
+        )
+        
+        # Prepare documents for batch insertion
+        documents = []
+        for chunk in processed_doc.chunks:
+            # Include document title in chunk metadata
+            chunk_metadata = {
+                **chunk.metadata,
+                'title': processed_doc.title,  # Add document title
+                'document_title': processed_doc.title  # Also add as document_title for compatibility
+            }
+            documents.append({
+                'content': chunk.content,
+                'metadata': chunk_metadata
+            })
+        
+        # Process chunks in batches
+        total_batches = (len(documents) + batch_size - 1) // batch_size
+        
+        for batch_idx in range(0, len(documents), batch_size):
+            batch_docs = documents[batch_idx:batch_idx + batch_size]
+            batch_num = (batch_idx // batch_size) + 1
             
-            # Update progress
-            progress = 50 + int((i + 1) / total_chunks * 45)  # 50-95%
-            await notification_service.notify_processing_progress(
-                document_id=document_id,
-                progress=progress,
-                message=f"Storing chunk {i + 1}/{total_chunks}..."
-            )
+            try:
+                # Update progress
+                progress = 60 + int((batch_num - 1) / total_batches * 35)  # 60-95%
+                await notification_service.notify_processing_progress(
+                    document_id=document_id,
+                    progress=progress,
+                    message=f"Storing batch {batch_num}/{total_batches} ({len(batch_docs)} chunks)..."
+                )
+                
+                # Use batch insertion
+                await rag_system.add_documents_batch(
+                    documents=batch_docs,
+                    collection_name='documents'
+                )
+                
+                chunks_stored += len(batch_docs)
+                
+            except Exception as e:
+                logger.error(f"Batch insertion failed for batch {batch_num}, falling back to individual insertion: {e}")
+                # Fallback to individual insertion
+                for doc in batch_docs:
+                    try:
+                        await rag_system.add_document(
+                            content=doc['content'],
+                            metadata=doc['metadata'],
+                            collection_name='documents'
+                        )
+                        chunks_stored += 1
+                    except Exception as fallback_error:
+                        logger.error(f"Failed to store individual chunk: {fallback_error}")
         
         # Notify completion
         processing_time = time.time() - notification_service.processing_status[document_id]['start_time']
@@ -1419,29 +1705,82 @@ async def advanced_web_research(request: WebResearchRequest, background_tasks: B
         logger.error("Advanced web research failed", query=request.query, error=str(e))
         raise HTTPException(status_code=500, detail=f"Advanced web research failed: {str(e)}")
 
-# GitHub indexing endpoint
-@app.post("/github/index", response_model=GitHubIndexResponse)
-async def index_github_repo(request: GitHubIndexRequest):
-    """Index GitHub repository"""
+# Background GitHub indexing function
+async def background_github_indexing(repo_url: str, indexing_id: str):
+    """Background GitHub repository indexing with notifications"""
     try:
-        logger.info("Starting GitHub indexing", repo_url=request.repository_url)
+        # Notify indexing start
+        await notification_service.notify_github_indexing_start(repo_url, indexing_id)
         
-        result = await github_indexer.index_and_store(
-            repo_url=request.repository_url,
-            rag_system=rag_system
+        # Progress updates
+        await notification_service.notify_github_indexing_progress(
+            indexing_id, 10, "Connecting to GitHub repository..."
         )
         
-        logger.info("GitHub indexing completed", 
-                   repo_url=request.repository_url,
-                   success=result.get('success', False))
+        # Perform the actual indexing
+        result = await github_indexer.index_and_store(
+            repo_url=repo_url,
+            rag_system=rag_system,
+            progress_callback=lambda progress, message: asyncio.create_task(
+                notification_service.notify_github_indexing_progress(indexing_id, progress, message)
+            )
+        )
         
-        return GitHubIndexResponse(**result)
+        # Calculate processing time
+        processing_time = time.time() - notification_service.processing_status[indexing_id]['start_time']
+        
+        # Notify completion
+        await notification_service.notify_github_indexing_complete(
+            indexing_id=indexing_id,
+            files_indexed=result.get('files_indexed', 0),
+            repository=result.get('repository', repo_url),
+            processing_time=processing_time
+        )
+        
+        # Update stats
+        stats = await rag_system.get_stats()
+        await notification_service.notify_stats_update(stats)
+        
+        logger.info("Background GitHub indexing completed", 
+                   repo_url=repo_url,
+                   indexing_id=indexing_id,
+                   files_indexed=result.get('files_indexed', 0))
         
     except Exception as e:
-        logger.error("GitHub indexing failed", 
+        logger.error("Background GitHub indexing failed", 
+                    repo_url=repo_url,
+                    indexing_id=indexing_id, 
+                    error=str(e))
+        await notification_service.notify_github_indexing_error(indexing_id, str(e))
+
+# GitHub indexing endpoint (now returns immediately)
+@app.post("/github/index")
+async def index_github_repo(request: GitHubIndexRequest, background_tasks: BackgroundTasks):
+    """Start GitHub repository indexing in background"""
+    try:
+        # Generate unique indexing ID
+        indexing_id = f"github_{int(time.time())}_{hash(request.repository_url) % 10000}"
+        
+        logger.info("Starting background GitHub indexing", 
+                   repo_url=request.repository_url,
+                   indexing_id=indexing_id)
+        
+        # Start background indexing
+        background_tasks.add_task(background_github_indexing, request.repository_url, indexing_id)
+        
+        # Return immediately with indexing ID
+        return {
+            "success": True,
+            "message": "GitHub indexing started in background",
+            "indexing_id": indexing_id,
+            "repository_url": request.repository_url
+        }
+        
+    except Exception as e:
+        logger.error("Failed to start GitHub indexing", 
                     repo_url=request.repository_url, 
                     error=str(e))
-        raise HTTPException(status_code=500, detail=f"GitHub indexing failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start GitHub indexing: {str(e)}")
 
 # Search endpoint
 @app.post("/search", response_model=SearchResponse)
@@ -1452,11 +1791,23 @@ async def search_knowledge_base(request: SearchRequest):
     try:
         logger.info("Knowledge base search", query=request.query)
         
+        # Auto-adjust parameters for knowledge base overview queries
+        limit = request.limit
+        min_score = request.min_score
+        
+        overview_keywords = OVERVIEW_KEYWORDS
+        
+        is_overview_query = any(keyword in request.query.lower() for keyword in overview_keywords)
+        if is_overview_query:
+            limit = min(10, limit * 10)  # Increase limit for overview queries
+            min_score = max(0.1, min_score - 0.2)  # Lower threshold
+            logger.info(f"Knowledge base overview query detected - using limit={limit}, min_score={min_score}")
+        
         search_results = await rag_system.search_knowledge_base(
             query=request.query,
             collections=request.collections,
-            limit=request.limit,
-            min_score=request.min_score
+            limit=limit,
+            min_score=min_score
         )
         
         # Convert search results to Pydantic models
@@ -1478,16 +1829,90 @@ async def search_knowledge_base(request: SearchRequest):
                    results_count=len(results),
                    processing_time=processing_time)
         
+        # For overview queries, limit displayed results to 10 initially
+        displayed_results = results
+        has_more = False
+        
+        if is_overview_query and len(results) > 10:
+            displayed_results = results[:10]
+            has_more = True
+        
         return SearchResponse(
             query=request.query,
-            results=results,
+            results=displayed_results,
             total_results=len(results),
-            processing_time=processing_time
+            processing_time=processing_time,
+            is_overview_query=is_overview_query,
+            displayed_results=len(displayed_results),
+            has_more=has_more
         )
         
     except Exception as e:
         logger.error("Search failed", query=request.query, error=str(e))
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+@app.post("/search/more", response_model=SearchResponse)
+async def search_more_results(request: SearchRequest, offset: int = 10):
+    """Get additional search results for pagination"""
+    start_time = time.time()
+    
+    try:
+        logger.info("Search more request", query=request.query, offset=offset)
+        
+        # Auto-adjust parameters for knowledge base overview queries
+        limit = request.limit
+        min_score = request.min_score
+        
+        overview_keywords = OVERVIEW_KEYWORDS
+        
+        is_overview_query = any(keyword in request.query.lower() for keyword in overview_keywords)
+        if is_overview_query:
+            limit = min(50, limit * 10)  # Increase limit for overview queries
+            min_score = max(0.1, min_score - 0.2)  # Lower threshold
+        
+        # Get all results
+        search_results = await rag_system.search_knowledge_base(
+            query=request.query,
+            collections=request.collections,
+            limit=limit,
+            min_score=min_score
+        )
+        
+        # Convert search results to Pydantic models
+        from models import SearchResult as PydanticSearchResult
+        all_results = [
+            PydanticSearchResult(
+                content=result.content,
+                metadata=result.metadata,
+                score=result.score,
+                source=result.source
+            )
+            for result in search_results
+        ]
+        
+        # Return results starting from offset
+        remaining_results = all_results[offset:]
+        processing_time = time.time() - start_time
+        
+        logger.info("Search more completed", 
+                   query=request.query,
+                   offset=offset,
+                   remaining_count=len(remaining_results),
+                   processing_time=processing_time)
+        
+        return SearchResponse(
+            query=request.query,
+            results=remaining_results,
+            total_results=len(all_results),
+            processing_time=processing_time,
+            is_overview_query=is_overview_query,
+            displayed_results=len(remaining_results),
+            has_more=False  # This endpoint returns all remaining results
+        )
+        
+    except Exception as e:
+        logger.error("Search more failed", query=request.query, offset=offset, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Search more failed: {str(e)}")
 
 # Configuration endpoints
 @app.get("/config", response_model=ConfigResponse)

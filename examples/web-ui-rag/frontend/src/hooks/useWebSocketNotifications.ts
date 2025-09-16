@@ -22,9 +22,22 @@ interface ProcessingStatus {
   error?: string
 }
 
+interface GitHubIndexingStatus {
+  indexing_id: string
+  repo_url: string
+  status: 'indexing' | 'completed' | 'error'
+  progress?: number
+  message?: string
+  files_indexed?: number
+  repository?: string
+  processing_time?: number
+  error?: string
+}
+
 export function useWebSocketNotifications() {
   const [isConnected, setIsConnected] = useState(false)
   const [processingFiles, setProcessingFiles] = useState<Map<string, ProcessingStatus>>(new Map())
+  const [githubIndexing, setGithubIndexing] = useState<Map<string, GitHubIndexingStatus>>(new Map())
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const { setStats, setHealth, setCollectionUpdating } = useStatsStore()
@@ -185,6 +198,75 @@ export function useWebSocketNotifications() {
         console.log('WebSocket status:', notification.data.status)
         break
 
+      case 'github_indexing_start':
+        const githubStartData = notification.data
+        const githubStatus: GitHubIndexingStatus = {
+          indexing_id: githubStartData.indexing_id,
+          repo_url: githubStartData.repo_url,
+          status: 'indexing',
+          progress: 0,
+          message: githubStartData.message
+        }
+        setGithubIndexing(prev => new Map(prev.set(githubStartData.indexing_id, githubStatus)))
+        toast.loading(`🔗 ${githubStartData.message}`, { 
+          id: githubStartData.indexing_id,
+          duration: Infinity 
+        })
+        setCollectionUpdating('github_code', true)
+        break
+
+      case 'github_indexing_progress':
+        const githubProgressData = notification.data
+        setGithubIndexing(prev => {
+          const newMap = new Map(prev)
+          const existing = newMap.get(githubProgressData.indexing_id)
+          if (existing) {
+            newMap.set(githubProgressData.indexing_id, {
+              ...existing,
+              progress: githubProgressData.progress,
+              message: githubProgressData.message
+            })
+          }
+          return newMap
+        })
+        
+        // Update toast with progress
+        toast.loading(`⚙️ ${githubProgressData.message} (${githubProgressData.progress}%)`, {
+          id: githubProgressData.indexing_id,
+          duration: Infinity
+        })
+        break
+
+      case 'github_indexing_complete':
+        const githubCompleteData = notification.data
+        setGithubIndexing(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(githubCompleteData.indexing_id)
+          return newMap
+        })
+        
+        toast.success(`✅ ${githubCompleteData.message}`, {
+          id: githubCompleteData.indexing_id,
+          duration: 6000
+        })
+        setCollectionUpdating('github_code', false)
+        break
+
+      case 'github_indexing_error':
+        const githubErrorData = notification.data
+        setGithubIndexing(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(githubErrorData.indexing_id)
+          return newMap
+        })
+        
+        toast.error(`❌ ${githubErrorData.message}`, {
+          id: githubErrorData.indexing_id,
+          duration: 8000
+        })
+        setCollectionUpdating('github_code', false)
+        break
+
       default:
         console.log('Unknown notification type:', notification.type)
     }
@@ -222,6 +304,7 @@ export function useWebSocketNotifications() {
   return {
     isConnected,
     processingFiles: Array.from(processingFiles.values()),
+    githubIndexing: Array.from(githubIndexing.values()),
     connect,
     disconnect,
     requestProcessingStatus
