@@ -28,6 +28,10 @@ class NotificationType(Enum):
     GITHUB_INDEXING_PROGRESS = "github_indexing_progress"
     GITHUB_INDEXING_COMPLETE = "github_indexing_complete"
     GITHUB_INDEXING_ERROR = "github_indexing_error"
+    WEB_RESEARCH_START = "web_research_start"
+    WEB_RESEARCH_PROGRESS = "web_research_progress"
+    WEB_RESEARCH_COMPLETE = "web_research_complete"
+    WEB_RESEARCH_ERROR = "web_research_error"
 
 @dataclass
 class Notification:
@@ -332,6 +336,28 @@ class NotificationService:
     def get_all_processing_status(self) -> Dict[str, Dict[str, Any]]:
         """Get all processing statuses"""
         return self.processing_status.copy()
+
+    async def send_notification(self, notification_data: Dict[str, Any]):
+        """Generic method to send any notification"""
+        # Convert string type to NotificationType enum if needed
+        notification_type = notification_data.get("type", "unknown")
+        if isinstance(notification_type, str):
+            try:
+                notification_type = NotificationType(notification_type)
+            except ValueError:
+                # If the type is not in the enum, create a custom notification
+                logger.warning(f"Unknown notification type: {notification_type}")
+                notification_type = NotificationType.SYSTEM_STATUS
+        
+        notification = Notification(
+            type=notification_type,
+            data=notification_data.get("data", {}),
+            timestamp=time.time(),
+            id=notification_data.get("id")
+        )
+        
+        await self.websocket_manager.broadcast(notification)
+        logger.info(f"📢 Sent notification: {notification.type.value}")
 
 # Global notification service instance
 _notification_service = None

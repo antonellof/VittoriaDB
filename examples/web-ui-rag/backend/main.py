@@ -1066,6 +1066,137 @@ Show me examples of the core functionality?
         }
     )
 
+async def handle_web_research_websocket(request_data: dict, websocket: WebSocket):
+    """Handle web research request via WebSocket"""
+    try:
+        query = request_data.get('query', '')
+        search_engine = request_data.get('search_engine', 'duckduckgo')
+        max_results = request_data.get('max_results', 5)
+        
+        if not query:
+            await manager.send_personal_message({
+                "type": "web_research_error",
+                "error": "Query is required"
+            }, websocket)
+            return
+        
+        start_time = time.time()
+        research_id = f"web_research_{int(time.time() * 1000)}"
+        
+        # Send start message
+        await manager.send_personal_message({
+            "type": "web_research_start",
+            "content": f"Starting web research for: {query}",
+            "research_id": research_id
+        }, websocket)
+        
+        logger.info("🚀 Starting WebSocket web research", query=query)
+        
+        # Perform research with Crawl4AI - use 'simple' strategy to avoid scipy errors
+        search_results = await advanced_web_researcher.research_query(
+            query=query,
+            search_engine=search_engine,
+            scrape_content=True,
+            extraction_strategy='simple'  # Use simple extraction to avoid distance matrix errors
+        )
+        
+        if not search_results:
+            processing_time = time.time() - start_time
+            await manager.send_personal_message({
+                "type": "web_research_error",
+                "error": "No results found",
+                "processing_time": processing_time
+            }, websocket)
+            return
+        
+        # Send progress with found results
+        await manager.send_personal_message({
+            "type": "web_research_progress",
+            "content": f"Found {len(search_results)} results, processing...",
+            "progress": 25,
+            "results": [{"title": r.get('title', ''), "url": r.get('url', '')} for r in search_results[:5]]
+        }, websocket)
+        
+        # Store results in RAG system
+        stored_ids = []
+        for i, result in enumerate(search_results):
+            try:
+                # Send progress update
+                progress = 25 + (i / len(search_results)) * 70  # 25-95%
+                await manager.send_personal_message({
+                    "type": "web_research_progress",
+                    "content": f"Processing result {i+1}/{len(search_results)}: {result.get('title', 'Untitled')[:50]}...",
+                    "progress": int(progress)
+                }, websocket)
+                
+                # Create enhanced content
+                enhanced_content = f"""
+Title: {result.get('title', 'No title')}
+URL: {result.get('url', 'No URL')}
+Content: {result.get('content', result.get('text', 'No content'))}
+"""
+                
+                # Store in RAG system
+                document_id = await rag_system.add_document(
+                    content=enhanced_content,
+                    metadata={
+                        'source': 'web_search',
+                        'source_collection': 'web_research',
+                        'url': result.get('url', ''),
+                        'title': result.get('title', ''),
+                        'query': query,
+                        'search_engine': search_engine,
+                        'timestamp': time.time(),
+                        'research_id': research_id
+                    },
+                    collection_name='web_research'
+                )
+                stored_ids.append(document_id)
+                
+            except Exception as e:
+                logger.error("Failed to store web research result", error=str(e), url=result.get('url', ''))
+                continue
+        
+        processing_time = time.time() - start_time
+        
+        # Send completion message
+        result_response = {
+            "success": True,
+            "message": f"Web research completed: {len(stored_ids)} results stored",
+            "query": query,
+            "results_count": len(search_results),
+            "stored_count": len(stored_ids),
+            "processing_time": processing_time,
+            "results": [
+                {
+                    "title": r.get('title', ''),
+                    "url": r.get('url', ''),
+                    "snippet": r.get('content', r.get('text', ''))[:200] + '...' if r.get('content') or r.get('text') else ''
+                }
+                for r in search_results[:10]
+            ]
+        }
+        
+        await manager.send_personal_message({
+            "type": "web_research_complete",
+            "content": f"Research completed: {len(stored_ids)} results stored",
+            "progress": 100,
+            "results": result_response
+        }, websocket)
+        
+        logger.info("✅ WebSocket web research completed", 
+                   query=query, 
+                   results_count=len(search_results),
+                   stored_count=len(stored_ids),
+                   processing_time=processing_time)
+        
+    except Exception as e:
+        logger.error("WebSocket web research failed", query=request_data.get('query', ''), error=str(e))
+        await manager.send_personal_message({
+            "type": "web_research_error",
+            "error": f"Web research failed: {str(e)}"
+        }, websocket)
+
 # WebSocket endpoint for streaming chat
 @app.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
@@ -1078,10 +1209,16 @@ async def websocket_chat(websocket: WebSocket):
             data = await websocket.receive_text()
             request_data = json.loads(data)
             
-            logger.info("WebSocket chat request", message=request_data.get('message', '')[:100])
+            logger.info("WebSocket request", type=request_data.get('type', 'chat'), message=request_data.get('message', '')[:100])
             
             try:
-                # Parse request
+                # Handle different message types
+                if request_data.get('type') == 'web_research':
+                    # Handle web research request
+                    await handle_web_research_websocket(request_data, websocket)
+                    continue
+                
+                # Parse chat request
                 request = ChatRequest(**request_data)
                 
                 # Send typing indicator
@@ -1116,7 +1253,7 @@ async def websocket_chat(websocket: WebSocket):
                         query=request.message,
                         search_engine='duckduckgo',
                         scrape_content=True,
-                        extraction_strategy='cosine'
+                        extraction_strategy='simple'
                     )
                     
                     # Store results
@@ -1459,10 +1596,153 @@ async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File
         raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
 # Main web research endpoint (now using Crawl4AI)
+@app.post("/research/stream")
+async def web_research_stream(request: WebResearchRequest):
+    """Perform web research with streaming updates"""
+    async def generate_research_stream():
+        try:
+            start_time = time.time()
+            research_id = f"web_research_{int(time.time() * 1000)}"
+            
+            # Send start event
+            yield f"data: {json.dumps({'type': 'start', 'research_id': research_id, 'query': request.query, 'message': f'Starting web research for: {request.query}'})}\n\n"
+            
+            logger.info("🚀 Starting web research with Crawl4AI", query=request.query)
+            
+            # Perform research with Crawl4AI
+            search_results = await advanced_web_researcher.research_query(
+                query=request.query,
+                search_engine=request.search_engine,
+                scrape_content=True,
+                extraction_strategy='simple'  # Use simple extraction to avoid scipy errors
+            )
+            
+            if not search_results:
+                processing_time = time.time() - start_time
+                yield f"data: {json.dumps({'type': 'error', 'message': 'No results found', 'processing_time': processing_time})}\n\n"
+                return
+            
+            # Send initial results found
+            yield f"data: {json.dumps({'type': 'results_found', 'count': len(search_results), 'message': f'Found {len(search_results)} results, processing...'})}\n\n"
+            
+            # Stream individual results as they're processed
+            stored_ids = []
+            for i, result in enumerate(search_results):
+                try:
+                    # Send result details
+                    result_data = {
+                        'type': 'result_detail',
+                        'index': i,
+                        'title': result.title or f"Result {i+1}",
+                        'url': result.url,
+                        'content_preview': result.content[:200] + "..." if len(result.content) > 200 else result.content,
+                        'status': 'scraped' if result.content else 'found'
+                    }
+                    yield f"data: {json.dumps(result_data)}\n\n"
+                    
+                    if not result.content:
+                        continue
+                    
+                    # Send storing status
+                    yield f"data: {json.dumps({'type': 'storing', 'index': i, 'message': f'Storing: {result.title or result.url}'})}\n\n"
+                    
+                    # Create enhanced content with Crawl4AI data
+                    content_parts = [result.content]
+                    
+                    if result.structured_data:
+                        content_parts.append(f"\n\n**Structured Data:**\n{str(result.structured_data)}")
+                    
+                    if result.markdown_content:
+                        content_parts.append(f"\n\n**Markdown Content:**\n{result.markdown_content[:1000]}...")
+                    
+                    if result.links:
+                        links_text = "\n".join([f"- [{link['text']}]({link['url']})" for link in result.links[:5]])
+                        content_parts.append(f"\n\n**Related Links:**\n{links_text}")
+                    
+                    enhanced_content = "\n".join(content_parts)
+                    
+                    # Enhanced metadata with Crawl4AI features
+                    metadata = {
+                        'type': 'web_research_crawl4ai',
+                        'title': result.title,
+                        'document_title': result.title,
+                        'url': result.url,
+                        'source': result.source,
+                        'source_collection': 'web_search',
+                        'query': request.query,
+                        'timestamp': result.timestamp,
+                        'content_length': len(result.content),
+                        'has_structured_data': bool(result.structured_data),
+                        'has_markdown': bool(result.markdown_content),
+                        'links_count': len(result.links) if result.links else 0,
+                        'extraction_strategy': 'cosine'
+                    }
+                    
+                    # Store in RAG system
+                    doc_id = await rag_system.add_document(
+                        content=enhanced_content,
+                        metadata=metadata,
+                        collection_name="web_research"
+                    )
+                    
+                    if doc_id:
+                        stored_ids.append(doc_id)
+                        # Send stored confirmation
+                        yield f"data: {json.dumps({'type': 'result_stored', 'index': i, 'doc_id': doc_id, 'title': result.title})}\n\n"
+                    else:
+                        # Send storage error
+                        yield f"data: {json.dumps({'type': 'storage_error', 'index': i, 'message': f'Failed to store: {result.title}'})}\n\n"
+                        
+                except Exception as e:
+                    logger.error("Failed to store result", result_url=result.url, error=str(e))
+                    yield f"data: {json.dumps({'type': 'storage_error', 'index': i, 'message': f'Error storing {result.title}: {str(e)}'})}\n\n"
+            
+            processing_time = time.time() - start_time
+            
+            # Send completion
+            completion_data = {
+                'type': 'complete',
+                'research_id': research_id,
+                'query': request.query,
+                'message': f'Web research completed: {len(stored_ids)} results stored',
+                'urls_found': len(search_results),
+                'urls_scraped': len([r for r in search_results if r.content]),
+                'results_stored': len(stored_ids),
+                'processing_time': processing_time
+            }
+            yield f"data: {json.dumps(completion_data)}\n\n"
+            
+        except Exception as e:
+            logger.error("Web research failed", query=request.query, error=str(e))
+            yield f"data: {json.dumps({'type': 'error', 'message': f'Web research failed: {str(e)}'})}\n\n"
+    
+    return StreamingResponse(
+        generate_research_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream",
+        }
+    )
+
 @app.post("/research", response_model=WebResearchResponse)
 async def web_research(request: WebResearchRequest, background_tasks: BackgroundTasks):
     """Perform web research using Crawl4AI and store results"""
     try:
+        start_time = time.time()
+        research_id = f"web_research_{int(time.time() * 1000)}"
+        
+        # Send start notification
+        await notification_service.send_notification({
+            "type": "web_research_start",
+            "data": {
+                "research_id": research_id,
+                "query": request.query,
+                "message": f"Starting web research for: {request.query}"
+            }
+        })
+        
         logger.info("🚀 Starting web research with Crawl4AI", query=request.query)
         
         # Perform research with Crawl4AI
@@ -1470,17 +1750,19 @@ async def web_research(request: WebResearchRequest, background_tasks: Background
             query=request.query,
             search_engine=request.search_engine,
             scrape_content=True,
-            extraction_strategy='cosine'  # Use semantic extraction
+            extraction_strategy='simple'  # Use semantic extraction
         )
         
         if not search_results:
+            processing_time = time.time() - start_time
             return WebResearchResponse(
                 success=False,
                 message="No results found",
+                query=request.query,
                 results_count=0,
                 results=[],
                 stored_count=0,
-                stored_ids=[]
+                processing_time=processing_time
             )
         
         # Store results in RAG system
@@ -1557,17 +1839,58 @@ async def web_research(request: WebResearchRequest, background_tasks: Background
                    results_count=len(search_results),
                    stored_count=len(stored_ids))
         
+        processing_time = time.time() - start_time
+        
+        # Prepare detailed results for notification
+        detailed_results = []
+        for i, result in enumerate(search_results):
+            stored_id = stored_ids[i] if i < len(stored_ids) else None
+            detailed_results.append({
+                "title": result.title or f"Result {i+1}",
+                "url": result.url,
+                "content_preview": result.content[:200] + "..." if len(result.content) > 200 else result.content,
+                "status": "stored" if stored_id else ("scraped" if result.content else "error")
+            })
+        
+        # Send completion notification
+        await notification_service.send_notification({
+            "type": "web_research_complete",
+            "data": {
+                "research_id": research_id,
+                "query": request.query,
+                "message": f"Web research completed: {len(stored_ids)} results stored",
+                "urls_found": len(search_results),
+                "urls_scraped": len(search_results),
+                "results_stored": len(stored_ids),
+                "processing_time": processing_time,
+                "results": detailed_results
+            }
+        })
+        
         return WebResearchResponse(
             success=True,
             message=f"Web research completed with Crawl4AI. Found {len(search_results)} results, stored {len(stored_ids)} successfully.",
+            query=request.query,
             results_count=len(search_results),
             results=response_results,
             stored_count=len(stored_ids),
-            stored_ids=stored_ids
+            processing_time=processing_time
         )
         
     except Exception as e:
         logger.error("Web research failed", query=request.query, error=str(e))
+        
+        # Send error notification
+        await notification_service.send_notification({
+            "type": "web_research_error",
+            "data": {
+                "research_id": research_id if 'research_id' in locals() else "unknown",
+                "query": request.query,
+                "message": f"Web research failed: {str(e)}",
+                "error": str(e)
+            }
+        })
+        
         raise HTTPException(status_code=500, detail=f"Web research failed: {str(e)}")
 
 # Legacy web research endpoint (BeautifulSoup)
@@ -1598,6 +1921,7 @@ async def legacy_web_research(request: WebResearchRequest, background_tasks: Bac
 async def advanced_web_research(request: WebResearchRequest, background_tasks: BackgroundTasks):
     """Perform advanced web research using Crawl4AI and store results"""
     try:
+        start_time = time.time()
         logger.info("🚀 Starting advanced web research with Crawl4AI", query=request.query)
         
         # Perform research with Crawl4AI
@@ -1605,17 +1929,19 @@ async def advanced_web_research(request: WebResearchRequest, background_tasks: B
             query=request.query,
             search_engine=request.search_engine,
             scrape_content=True,
-            extraction_strategy='cosine'  # Use semantic extraction
+            extraction_strategy='simple'  # Use semantic extraction
         )
         
         if not search_results:
+            processing_time = time.time() - start_time
             return WebResearchResponse(
                 success=False,
                 message="No results found",
+                query=request.query,
                 results_count=0,
                 results=[],
                 stored_count=0,
-                stored_ids=[]
+                processing_time=processing_time
             )
         
         # Store results in RAG system
@@ -1692,13 +2018,16 @@ async def advanced_web_research(request: WebResearchRequest, background_tasks: B
                    results_count=len(search_results),
                    stored_count=len(stored_ids))
         
+        processing_time = time.time() - start_time
+        
         return WebResearchResponse(
             success=True,
             message=f"Advanced research completed with Crawl4AI. Found {len(search_results)} results, stored {len(stored_ids)} successfully.",
+            query=request.query,
             results_count=len(search_results),
             results=response_results,
             stored_count=len(stored_ids),
-            stored_ids=stored_ids
+            processing_time=processing_time
         )
         
     except Exception as e:
@@ -1913,6 +2242,131 @@ async def search_more_results(request: SearchRequest, offset: int = 10):
     except Exception as e:
         logger.error("Search more failed", query=request.query, offset=offset, error=str(e))
         raise HTTPException(status_code=500, detail=f"Search more failed: {str(e)}")
+
+# Document listing endpoints
+@app.get("/documents/{collection_name}/original")
+async def get_original_documents(collection_name: str):
+    """Get original documents (grouped by source file) instead of individual chunks"""
+    try:
+        logger.info(f"📋 Getting original documents from {collection_name} collection")
+        
+        documents = await rag_system.get_original_documents(collection_name)
+        
+        return {
+            "success": True,
+            "collection": collection_name,
+            "documents": documents,
+            "count": len(documents)
+        }
+        
+    except Exception as e:
+        logger.error("Failed to get original documents", collection=collection_name, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get original documents: {str(e)}")
+
+@app.get("/documents/{collection_name}")
+async def list_documents(collection_name: str, limit: int = 200):
+    """List all document chunks in a collection without using embeddings"""
+    try:
+        logger.info(f"📋 Listing document chunks from {collection_name} collection")
+        
+        documents = await rag_system.list_documents(collection_name, limit)
+        
+        return {
+            "success": True,
+            "collection": collection_name,
+            "documents": documents,
+            "count": len(documents)
+        }
+        
+    except Exception as e:
+        logger.error("Failed to list documents", collection=collection_name, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
+
+# Document deletion endpoints
+@app.delete("/documents/{collection_name}/{document_id}")
+async def delete_document_by_id(collection_name: str, document_id: str):
+    """Delete a document by its ID"""
+    try:
+        logger.info(f"🗑️ Delete request for document {document_id} in {collection_name}")
+        
+        result = await rag_system.delete_document_by_id(document_id, collection_name)
+        
+        if result['success']:
+            logger.info("Document deletion completed", 
+                       collection=collection_name,
+                       document_id=document_id)
+            return {
+                "success": True,
+                "message": f"Successfully deleted document {document_id}",
+                "document_id": document_id,
+                "collection": collection_name
+            }
+        else:
+            logger.error("Document deletion failed", error=result['error'])
+            raise HTTPException(status_code=500, detail=result['error'])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Document deletion failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
+
+@app.delete("/documents/{collection_name}")
+async def delete_document(
+    collection_name: str,
+    filename: Optional[str] = None,
+    title: Optional[str] = None,
+    url: Optional[str] = None
+):
+    """Delete a document and all its chunks from a collection"""
+    try:
+        if not any([filename, title, url]):
+            raise HTTPException(
+                status_code=400, 
+                detail="At least one of filename, title, or url must be provided"
+            )
+        
+        logger.info("Document deletion request", 
+                   collection=collection_name, 
+                   filename=filename, 
+                   title=title, 
+                   url=url)
+        
+        # Debug: Log what we're searching for
+        search_criteria = []
+        if filename: search_criteria.append(f"filename='{filename}'")
+        if title: search_criteria.append(f"title='{title}'")
+        if url: search_criteria.append(f"url='{url}'")
+        logger.info(f"🔍 Searching for documents with criteria: {', '.join(search_criteria)}")
+        
+        result = await rag_system.delete_document_by_metadata(
+            filename=filename,
+            title=title,
+            url=url,
+            collection_name=collection_name
+        )
+        
+        if result['success']:
+            logger.info("Document deletion completed", 
+                       collection=collection_name,
+                       deleted_chunks=result['deleted_chunks'],
+                       deleted_documents=result['deleted_documents'])
+            return {
+                "success": True,
+                "message": f"Successfully deleted {result['deleted_chunks']} chunks from {len(result['deleted_documents'])} documents",
+                "deleted_chunks": result['deleted_chunks'],
+                "deleted_documents": result['deleted_documents'],
+                "collection": collection_name
+            }
+        else:
+            logger.error("Document deletion failed", error=result['error'])
+            raise HTTPException(status_code=500, detail=result['error'])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Document deletion failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
 
 # Configuration endpoints
 @app.get("/config", response_model=ConfigResponse)

@@ -76,7 +76,7 @@ class WebResearchResponse(BaseModel):
     results_count: int
     stored_count: int
     processing_time: float
-    results: List[Dict[str, str]]
+    results: List[Dict[str, Any]]
 
 class GitHubIndexRequest(BaseModel):
     """GitHub repository indexing request"""

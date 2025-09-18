@@ -34,10 +34,30 @@ interface GitHubIndexingStatus {
   error?: string
 }
 
+interface WebResearchStatus {
+  research_id: string
+  query: string
+  status: 'researching' | 'completed' | 'error'
+  progress?: number
+  message?: string
+  urls_found?: number
+  urls_scraped?: number
+  results_stored?: number
+  processing_time?: number
+  error?: string
+  results?: Array<{
+    title: string
+    url: string
+    content_preview: string
+    status: 'found' | 'scraping' | 'scraped' | 'stored' | 'error'
+  }>
+}
+
 export function useWebSocketNotifications() {
   const [isConnected, setIsConnected] = useState(false)
   const [processingFiles, setProcessingFiles] = useState<Map<string, ProcessingStatus>>(new Map())
   const [githubIndexing, setGithubIndexing] = useState<Map<string, GitHubIndexingStatus>>(new Map())
+  const [webResearch, setWebResearch] = useState<Map<string, WebResearchStatus>>(new Map())
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const { setStats, setHealth, setCollectionUpdating } = useStatsStore()
@@ -267,6 +287,79 @@ export function useWebSocketNotifications() {
         setCollectionUpdating('github_code', false)
         break
 
+      case 'web_research_start':
+        const webStartData = notification.data
+        const webStatus: WebResearchStatus = {
+          research_id: webStartData.research_id,
+          query: webStartData.query,
+          status: 'researching',
+          progress: 0,
+          message: webStartData.message,
+          results: []
+        }
+        setWebResearch(prev => new Map(prev.set(webStartData.research_id, webStatus)))
+        toast.loading(`🌐 ${webStartData.message}`, { 
+          id: webStartData.research_id,
+          duration: Infinity 
+        })
+        setCollectionUpdating('web_research', true)
+        break
+
+      case 'web_research_progress':
+        const webProgressData = notification.data
+        setWebResearch(prev => {
+          const newMap = new Map(prev)
+          const existing = newMap.get(webProgressData.research_id)
+          if (existing) {
+            newMap.set(webProgressData.research_id, {
+              ...existing,
+              progress: webProgressData.progress,
+              message: webProgressData.message,
+              urls_found: webProgressData.urls_found,
+              urls_scraped: webProgressData.urls_scraped,
+              results_stored: webProgressData.results_stored,
+              results: webProgressData.results || existing.results
+            })
+          }
+          return newMap
+        })
+        
+        toast.loading(`🌐 ${webProgressData.message}`, {
+          id: webProgressData.research_id,
+          duration: Infinity
+        })
+        break
+
+      case 'web_research_complete':
+        const webCompleteData = notification.data
+        setWebResearch(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(webCompleteData.research_id)
+          return newMap
+        })
+        
+        toast.success(`✅ ${webCompleteData.message}`, {
+          id: webCompleteData.research_id,
+          duration: 6000
+        })
+        setCollectionUpdating('web_research', false)
+        break
+
+      case 'web_research_error':
+        const webErrorData = notification.data
+        setWebResearch(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(webErrorData.research_id)
+          return newMap
+        })
+        
+        toast.error(`❌ ${webErrorData.message}`, {
+          id: webErrorData.research_id,
+          duration: 8000
+        })
+        setCollectionUpdating('web_research', false)
+        break
+
       default:
         console.log('Unknown notification type:', notification.type)
     }
@@ -305,6 +398,7 @@ export function useWebSocketNotifications() {
     isConnected,
     processingFiles: Array.from(processingFiles.values()),
     githubIndexing: Array.from(githubIndexing.values()),
+    webResearch: Array.from(webResearch.values()),
     connect,
     disconnect,
     requestProcessingStatus

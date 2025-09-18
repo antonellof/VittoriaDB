@@ -93,9 +93,10 @@ import {
 import { nanoid } from 'nanoid'
 import { useTheme } from 'next-themes'
 import { Toaster } from 'react-hot-toast'
-import { useStatsStore } from '@/store'
+import { useStatsStore, useChatStore } from '@/store'
 import { SettingsPanel } from '@/components/settings-panel'
 import { DataSourcesPanel } from '@/components/data-sources-panel'
+import { DocumentsViewer } from '@/components/documents-viewer'
 import { apiClient } from '@/lib/api'
 import { useWebSocketNotifications } from '@/hooks/useWebSocketNotifications'
 import { cn } from '@/lib/utils'
@@ -179,6 +180,7 @@ export default function Home() {
   const { } = useTheme()
   const { stats, health } = useStatsStore()
   const { isConnected, processingFiles } = useWebSocketNotifications()
+  const { connectWebSocket, isConnected: chatConnected } = useChatStore()
 
   // Drag & drop for file upload
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -591,6 +593,11 @@ export default function Home() {
 
   // Initialize app and create initial session if needed
   useEffect(() => {
+    // Connect to chat WebSocket for web research functionality
+    connectWebSocket().catch(error => {
+      console.warn('Failed to connect chat WebSocket:', error)
+    })
+    
     // Create initial session if auto-save is enabled and no session exists
     if (autoSaveEnabled && !currentSessionId) {
       createNewChatSession('Welcome Chat').then(sessionId => {
@@ -602,7 +609,7 @@ export default function Home() {
         console.warn('Failed to create welcome session:', error)
       })
     }
-  }, [autoSaveEnabled, currentSessionId])
+  }, [autoSaveEnabled, currentSessionId, connectWebSocket])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -1025,21 +1032,56 @@ export default function Home() {
                 
                 {collectionsExpanded && stats?.collections ? (
                   <div className="space-y-2">
-                    {Object.entries(stats.collections).map(([name, collection]) => (
-                      <div key={name} className="bg-muted/50 rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium capitalize">
-                            {name.replace('_', ' ')}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {collection.vector_count} docs
-                          </span>
+                    {Object.entries(stats.collections).map(([name, collection]) => {
+                      const getCollectionIcon = (collectionName: string) => {
+                        switch (collectionName) {
+                          case 'documents': return FileIcon
+                          case 'web_research': return GlobeIcon
+                          case 'github_code': return Code
+                          case 'chat_history': return MessageSquare
+                          default: return Database
+                        }
+                      }
+
+                      const getCollectionTitle = (collectionName: string) => {
+                        switch (collectionName) {
+                          case 'documents': return 'Documents'
+                          case 'web_research': return 'Web Research'
+                          case 'github_code': return 'GitHub Code'
+                          case 'chat_history': return 'Chat History'
+                          default: return collectionName.replace('_', ' ')
+                        }
+                      }
+
+                      return (
+                        <div key={name} className="bg-muted/50 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium capitalize">
+                              {name.replace('_', ' ')}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {collection.vector_count} docs
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-2">
+                            {collection.dimensions}D • {collection.index_type?.toUpperCase() || 'FLAT'} • {collection.metric}
+                          </div>
+                          
+                          {collection.vector_count > 0 && (
+                            <DocumentsViewer
+                              collectionName={name}
+                              collectionTitle={getCollectionTitle(name)}
+                              icon={getCollectionIcon(name)}
+                              trigger={
+                                <Button variant="ghost" size="sm" className="w-full justify-start h-7 text-xs">
+                                  View Sources
+                                </Button>
+                              }
+                            />
+                          )}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {collection.dimensions}D • {collection.index_type?.toUpperCase() || 'FLAT'} • {collection.metric}
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground">

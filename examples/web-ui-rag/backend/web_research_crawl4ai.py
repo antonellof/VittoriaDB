@@ -109,7 +109,7 @@ class AdvancedWebResearcher:
                            query: str,
                            search_engine: str = 'duckduckgo',
                            scrape_content: bool = True,
-                           extraction_strategy: str = 'cosine',
+                           extraction_strategy: str = 'simple',
                            rag_system=None) -> List[WebSearchResult]:
         """Research a query with advanced Crawl4AI extraction"""
         
@@ -218,7 +218,7 @@ class AdvancedWebResearcher:
                                  crawler: AsyncWebCrawler,
                                  url: str, 
                                  query: str = None,
-                                 extraction_strategy: str = 'cosine') -> ScrapedContent:
+                                 extraction_strategy: str = 'simple') -> ScrapedContent:
         """Advanced URL crawling with Crawl4AI"""
         try:
             logger.info(f"🕷️ Crawling: {url}")
@@ -226,12 +226,13 @@ class AdvancedWebResearcher:
             # Choose extraction strategy
             strategy = None
             if extraction_strategy == 'cosine' and query:
+                # Use more lenient settings to avoid empty distance matrix errors
                 strategy = CosineStrategy(
                     semantic_filter=query,
-                    word_count_threshold=10,
-                    max_dist=0.2,
+                    word_count_threshold=5,  # Lower threshold to capture more content
+                    max_dist=0.4,            # Higher distance tolerance
                     linkage_method="ward",
-                    top_k=3
+                    top_k=5                  # Get more results
                 )
             elif extraction_strategy == 'llm' and query:
                 # LLM-based extraction (requires OpenAI API key)
@@ -240,6 +241,9 @@ class AdvancedWebResearcher:
                     api_token=os.getenv("OPENAI_API_KEY"),
                     instruction=f"Extract the most relevant information related to: {query}"
                 )
+            elif extraction_strategy == 'simple':
+                # No extraction strategy - just use cleaned HTML (most reliable)
+                strategy = None
             
             # Create run config with extraction strategy
             run_config = CrawlerRunConfig(
@@ -252,15 +256,45 @@ class AdvancedWebResearcher:
                 page_timeout=15000  # 15 second timeout
             )
             
-            # Crawl the URL
-            result = await crawler.arun(url=url, config=run_config)
-            
-            if not result.success:
-                raise Exception(f"Crawl failed: {result.error_message}")
-            
-            # Extract content
-            content = result.extracted_content if result.extracted_content else result.cleaned_html
-            markdown_content = result.markdown if result.markdown else None
+            # Crawl the URL with error handling for scipy distance matrix issues
+            try:
+                result = await crawler.arun(url=url, config=run_config)
+                
+                if not result.success:
+                    raise Exception(f"Crawl failed: {result.error_message}")
+                
+                # Extract content
+                content = result.extracted_content if result.extracted_content else result.cleaned_html
+                markdown_content = result.markdown if result.markdown else None
+                
+            except Exception as e:
+                # Handle scipy distance matrix errors by falling back to simple extraction
+                if "empty distance matrix" in str(e) or "observations cannot be determined" in str(e):
+                    logger.warning(f"⚠️ CosineStrategy failed for {url}, falling back to simple extraction: {e}")
+                    
+                    # Retry without extraction strategy (simple HTML cleaning)
+                    simple_config = CrawlerRunConfig(
+                        cache_mode=CacheMode.BYPASS,
+                        process_iframes=True,
+                        remove_overlay_elements=True,
+                        wait_for_images=False,
+                        delay_before_return_html=2.0,
+                        page_timeout=15000
+                    )
+                    
+                    result = await crawler.arun(url=url, config=simple_config)
+                    
+                    if not result.success:
+                        raise Exception(f"Crawl failed even with simple extraction: {result.error_message}")
+                    
+                    # Use cleaned HTML as content
+                    content = result.cleaned_html
+                    markdown_content = result.markdown if result.markdown else None
+                    
+                    logger.info(f"✅ Successfully extracted content using simple method for {url}")
+                else:
+                    # Re-raise other errors
+                    raise
             
             # Get title from metadata
             title = result.metadata.get('title', 'No Title') if result.metadata else 'No Title'

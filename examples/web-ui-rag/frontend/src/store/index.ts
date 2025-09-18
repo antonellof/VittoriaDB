@@ -138,6 +138,40 @@ export const useChatStore = create<ChatStore>()(
             case 'error':
               set({ error, isLoading: false })
               break
+
+            // Web research specific messages
+            case 'web_research_start':
+              const researchStore = useResearchStore.getState()
+              researchStore.setCurrentStep(content || 'Starting web research...')
+              researchStore.setProgress(0)
+              break
+
+            case 'web_research_progress':
+              const researchStore2 = useResearchStore.getState()
+              researchStore2.setCurrentStep(content || 'Researching...')
+              if (data.progress !== undefined) {
+                researchStore2.setProgress(data.progress)
+              }
+              if (data.results) {
+                researchStore2.setFoundResults(data.results)
+              }
+              break
+
+            case 'web_research_complete':
+              const researchStore3 = useResearchStore.getState()
+              researchStore3.setResearching(false)
+              researchStore3.setCurrentStep('Research completed')
+              researchStore3.setProgress(100)
+              if (data.results) {
+                researchStore3.setResults(data.results)
+              }
+              break
+
+            case 'web_research_error':
+              const researchStore4 = useResearchStore.getState()
+              researchStore4.setResearching(false)
+              researchStore4.setError(error || 'Web research failed')
+              break
           }
         })
       } catch (error) {
@@ -155,7 +189,7 @@ export const useChatStore = create<ChatStore>()(
     },
 
     sendMessage: (message) => {
-      const { wsClient, messages, currentModel, searchLimit } = get()
+      const { wsClient, messages } = get()
       const uiStore = useUIStore.getState()
 
       if (!wsClient || !wsClient.isConnected) {
@@ -227,19 +261,55 @@ interface ResearchStore extends ResearchState {
   setLastQuery: (query: string) => void
   setResults: (results: WebResearchResponse | null) => void
   setError: (error: string | null) => void
+  setProgress: (progress: number) => void
+  setCurrentStep: (step: string) => void
+  setFoundResults: (results: any[]) => void
+  clearProgress: () => void
+  sendWebResearch: (query: string) => void
 }
 
 export const useResearchStore = create<ResearchStore>()(
-  devtools((set) => ({
+  devtools((set, get) => ({
     isResearching: false,
     lastQuery: '',
     results: null,
     error: null,
+    progress: 0,
+    currentStep: '',
+    foundResults: [],
 
     setResearching: (researching) => set({ isResearching: researching }),
     setLastQuery: (query) => set({ lastQuery: query }),
     setResults: (results) => set({ results }),
     setError: (error) => set({ error }),
+    setProgress: (progress) => set({ progress }),
+    setCurrentStep: (step) => set({ currentStep: step }),
+    setFoundResults: (results) => set({ foundResults: results }),
+    clearProgress: () => set({ progress: 0, currentStep: '', foundResults: [] }),
+
+    sendWebResearch: (query) => {
+      const chatStore = useChatStore.getState()
+      
+      if (!chatStore.wsClient || !chatStore.wsClient.isConnected) {
+        set({ error: 'Not connected to server' })
+        return
+      }
+
+      set({ 
+        isResearching: true, 
+        lastQuery: query, 
+        error: null,
+        progress: 0,
+        currentStep: 'Starting research...',
+        foundResults: []
+      })
+
+      chatStore.wsClient.sendWebResearch({
+        query,
+        search_engine: 'duckduckgo',
+        max_results: 5
+      })
+    },
   }))
 )
 

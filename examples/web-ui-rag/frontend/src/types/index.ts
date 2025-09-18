@@ -161,6 +161,9 @@ export interface ResearchState {
   lastQuery: string;
   results: WebResearchResponse | null;
   error: string | null;
+  progress: number;
+  currentStep: string;
+  foundResults: any[];
 }
 
 export interface GitHubState {

@@ -18,6 +18,7 @@ from openai import AsyncOpenAI
 
 # Simple embedding service using HTTP requests (no complex dependencies)
 import httpx
+import requests
 import numpy as np
 import re
 
@@ -784,6 +785,312 @@ class RAGSystem:
     async def get_stats(self) -> Dict[str, Any]:
         """Get RAG system statistics (async wrapper for get_collection_stats)"""
         return self.get_collection_stats()
+
+    async def get_original_documents(self, collection_name: str = 'documents') -> List[Dict[str, Any]]:
+        """Get original documents (grouped by source file) instead of individual chunks"""
+        try:
+            if collection_name not in self.collections:
+                raise ValueError(f"Collection '{collection_name}' not found")
+            
+            # Get all chunks from the collection
+            documents = await self.list_documents(collection_name, 1000)
+            logger.info(f"🔍 Retrieved {len(documents)} raw documents from list_documents")
+            
+            # Group chunks by original document
+            document_groups = {}
+            
+            for doc in documents:
+                metadata = doc.get('metadata', {})
+                
+                # Debug: Log metadata structure for first few documents
+                if len(document_groups) < 5:
+                    logger.info(f"🔍 Document metadata: {metadata}")
+                
+                # Use document_id as the primary grouping key, but try multiple fields
+                doc_id = (metadata.get('document_id') or 
+                         metadata.get('content_hash') or 
+                         metadata.get('filename') or
+                         doc.get('id'))
+                
+                if not doc_id:
+                    logger.warning(f"⚠️ No document ID found for chunk: {doc}")
+                    continue
+                
+                # Extract original document info
+                filename = metadata.get('filename', 'Unknown File')
+                title = metadata.get('title', filename)
+                file_type = metadata.get('file_type', 'unknown')
+                upload_timestamp = metadata.get('upload_timestamp', metadata.get('timestamp', 0))
+                content_hash = metadata.get('content_hash', '')
+                
+                if doc_id not in document_groups:
+                    document_groups[doc_id] = {
+                        'document_id': doc_id,
+                        'filename': filename,
+                        'title': title,
+                        'file_type': file_type,
+                        'upload_timestamp': upload_timestamp,
+                        'content_hash': content_hash,
+                        'collection': collection_name,
+                        'chunks': [],
+                        'total_chunks': 0,
+                        'total_size': 0
+                    }
+                
+                # Add chunk info
+                document_groups[doc_id]['chunks'].append({
+                    'chunk_id': doc['id'],
+                    'content_preview': doc.get('content', '')[:200] + '...' if doc.get('content') else 'No content',
+                    'score': doc.get('score', 0.0),
+                    'metadata': metadata
+                })
+                
+                document_groups[doc_id]['total_chunks'] += 1
+                if doc.get('content'):
+                    document_groups[doc_id]['total_size'] += len(doc.get('content', ''))
+            
+            # Convert to list and sort by upload time (newest first)
+            original_documents = list(document_groups.values())
+            original_documents.sort(key=lambda x: x['upload_timestamp'], reverse=True)
+            
+            logger.info(f"📋 Found {len(original_documents)} original documents with {sum(d['total_chunks'] for d in original_documents)} total chunks")
+            
+            return original_documents
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to get original documents: {str(e)}")
+            return []
+
+    async def list_documents(self, collection_name: str = 'documents', limit: int = 200) -> List[Dict[str, Any]]:
+        """List all documents in a collection WITHOUT using embeddings (direct VittoriaDB access)"""
+        try:
+            if collection_name not in self.collections:
+                raise ValueError(f"Collection '{collection_name}' not found")
+            
+            logger.info(f"🔍 Listing documents from {collection_name} using direct VittoriaDB access (NO embeddings)")
+            
+            # Use VittoriaDB Python SDK directly to avoid embedding generation
+            collection = self.collections[collection_name]
+            
+            # Try to get all vectors using the VittoriaDB SDK
+            try:
+                # Use the VittoriaDB collection's search method with a dummy vector
+                # This is a hack to get all documents without generating embeddings
+                import numpy as np
+                
+                # Create a zero vector with the right dimensions
+                dimensions = 1536  # Default OpenAI dimensions
+                zero_vector = np.zeros(dimensions).tolist()
+                
+                # Search with zero vector and very low min_score to get everything
+                results = collection.search(
+                    vector=zero_vector,
+                    limit=limit,
+                    min_score=0.0
+                )
+                
+                documents = []
+                for result in results:
+                    # Debug: Log the first few results
+                    if len(documents) < 3:
+                        logger.info(f"🔍 VittoriaDB result: {result}")
+                        logger.info(f"🔍 Result type: {type(result)}")
+                        logger.info(f"🔍 Result dict: {result.__dict__ if hasattr(result, '__dict__') else 'No __dict__'}")
+                    
+                    # Extract data from VittoriaDB result
+                    result_dict = result.__dict__ if hasattr(result, '__dict__') else {}
+                    
+                    documents.append({
+                        'id': result_dict.get('id', 'unknown'),
+                        'metadata': result_dict.get('metadata', {}),
+                        'score': result_dict.get('score', 0.0),
+                        'content': result_dict.get('content', '')
+                    })
+                
+                logger.info(f"📋 Listed {len(documents)} documents using VittoriaDB SDK (no embeddings)")
+                return documents
+                
+            except Exception as sdk_error:
+                logger.error(f"❌ VittoriaDB SDK method failed: {sdk_error}")
+                
+                # Fallback: Direct HTTP API call to VittoriaDB
+                logger.info("🔄 Falling back to direct HTTP API")
+                
+                # Get collection info first
+                response = requests.get(
+                    f"{self.vittoriadb_url}/collections/{collection_name}",
+                    timeout=30
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"❌ Failed to get collection info: {response.status_code}")
+                    return []
+                
+                collection_info = response.json()
+                dimensions = collection_info.get('dimensions', 1536)
+                
+                # Search with zero vector and explicitly request metadata and content
+                search_response = requests.post(
+                    f"{self.vittoriadb_url}/collections/{collection_name}/search",
+                    json={
+                        "vector": [0.0] * dimensions,
+                        "limit": limit,
+                        "min_score": 0.0,
+                        "include_metadata": True,  # Explicitly request metadata
+                        "include_content": True    # Explicitly request content
+                    },
+                    timeout=30
+                )
+                
+                if search_response.status_code != 200:
+                    logger.error(f"❌ Failed to search documents: {search_response.status_code}")
+                    return []
+                
+                search_results = search_response.json()
+                logger.info(f"🔍 HTTP API returned {len(search_results.get('results', []))} results")
+                
+                documents = []
+                for result in search_results.get('results', []):
+                    if len(documents) < 3:
+                        logger.info(f"🔍 HTTP result: {result}")
+                    
+                    documents.append({
+                        'id': result.get('id', 'unknown'),
+                        'metadata': result.get('metadata', {}),
+                        'score': result.get('score', 0.0),
+                        'content': result.get('content', '')
+                    })
+                
+                logger.info(f"📋 Listed {len(documents)} documents using HTTP API (no embeddings)")
+                return documents
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to list documents: {str(e)}")
+            return []
+
+    async def delete_document_by_id(self, document_id: str, collection_name: str = 'documents') -> Dict[str, Any]:
+        """Delete a document by its ID (much simpler and faster)"""
+        try:
+            if collection_name not in self.collections:
+                raise ValueError(f"Collection '{collection_name}' not found")
+            
+            logger.info(f"🗑️ Deleting document {document_id} from {collection_name}")
+            
+            # Delete the vector directly from VittoriaDB
+            response = requests.delete(
+                f"{self.vittoriadb_url}/collections/{collection_name}/vectors/{document_id}",
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"✅ Successfully deleted document {document_id}")
+                return {
+                    'success': True,
+                    'document_id': document_id,
+                    'collection': collection_name,
+                    'deleted_chunks': 1
+                }
+            else:
+                error_msg = f"Failed to delete document {document_id}: HTTP {response.status_code}"
+                logger.error(f"❌ {error_msg}")
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'document_id': document_id,
+                    'collection': collection_name
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to delete document {document_id}: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'document_id': document_id,
+                'collection': collection_name
+            }
+
+    async def delete_document_by_metadata(self, filename: str = None, title: str = None, url: str = None, collection_name: str = 'documents') -> Dict[str, Any]:
+        """Delete a document by its metadata (filename, title, or URL)"""
+        try:
+            if collection_name not in self.collections:
+                raise ValueError(f"Collection '{collection_name}' not found")
+            
+            collection = self.collections[collection_name]
+            
+            # Search for documents matching the criteria - use broader search
+            search_query = "*"  # Get all documents first, then filter
+            search_results = await self._search_single_collection(
+                collection, collection_name, search_query, limit=1000, min_score=0.0, is_overview_query=False
+            )
+            
+            logger.info(f"🔍 Found {len(search_results)} total chunks in {collection_name} collection")
+            
+            deleted_chunks = []
+            target_documents = set()
+            matched_chunks = 0
+            
+            for result in search_results:
+                metadata = result.metadata
+                
+                # Debug: Log metadata for first few results
+                if matched_chunks < 3:
+                    logger.info(f"🔍 Chunk metadata: {metadata}")
+                
+                # Check if this chunk matches our deletion criteria
+                should_delete = False
+                if filename and metadata.get('filename') == filename:
+                    should_delete = True
+                    logger.info(f"✅ Matched by filename: {filename}")
+                elif title and metadata.get('title') == title:
+                    should_delete = True
+                    logger.info(f"✅ Matched by title: {title}")
+                elif url and metadata.get('url') == url:
+                    should_delete = True
+                    logger.info(f"✅ Matched by URL: {url}")
+                
+                if should_delete:
+                    matched_chunks += 1
+                    try:
+                        # Get the document ID from metadata
+                        doc_id = metadata.get('document_id') or metadata.get('content_hash')
+                        if not doc_id:
+                            logger.warning(f"⚠️ No document ID found for chunk, skipping deletion. Metadata: {metadata}")
+                            continue
+                            
+                        logger.info(f"🗑️ Attempting to delete chunk {doc_id}")
+                        
+                        # Delete the vector from VittoriaDB
+                        response = requests.delete(
+                            f"{self.vittoriadb_url}/collections/{collection_name}/vectors/{doc_id}",
+                            timeout=30
+                        )
+                        if response.status_code == 200:
+                            deleted_chunks.append(doc_id)
+                            target_documents.add(metadata.get('filename') or metadata.get('title') or metadata.get('url'))
+                            logger.info(f"✅ Deleted chunk {doc_id} from {collection_name}")
+                        else:
+                            logger.error(f"❌ Failed to delete chunk {doc_id}: {response.status_code} - {response.text}")
+                    except Exception as e:
+                        logger.error(f"❌ Error deleting chunk: {str(e)}")
+            
+            logger.info(f"📊 Deletion summary: {matched_chunks} chunks matched criteria, {len(deleted_chunks)} chunks deleted")
+            
+            return {
+                'success': True,
+                'criteria': {'filename': filename, 'title': title, 'url': url},
+                'collection': collection_name,
+                'deleted_chunks': len(deleted_chunks),
+                'deleted_documents': list(target_documents),
+                'chunk_ids': deleted_chunks
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to delete document by metadata: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'collection': collection_name
+            }
     
     def close(self):
         """Close database connection"""
