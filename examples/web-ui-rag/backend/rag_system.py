@@ -640,7 +640,7 @@ class RAGSystem:
                                user_query: str,
                                context_results: List[SearchResult],
                                chat_history: List[ChatMessage] = None,
-                               model: str = "gpt-3.5-turbo") -> str:
+                               model: str = "gpt-4o") -> str:
         """Generate AI response using retrieved context"""
         
         if not self.openai_client:
@@ -680,9 +680,7 @@ class RAGSystem:
         """
         
         try:
-            # Generate response using OpenAI (default to GPT-4)
-            if model == 'gpt-3.5-turbo':
-                model = 'gpt-4'  # Upgrade to GPT-4 for better responses
+            # Generate response using OpenAI (use GPT-4o for best performance)
                 
             response = await self.openai_client.chat.completions.create(
                 model=model,

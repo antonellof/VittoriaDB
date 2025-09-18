@@ -220,7 +220,6 @@ def truncate_for_model(context_text: str, system_prompt: str, user_message: str,
     """Intelligently truncate context to fit model limits"""
     # Model context limits
     model_limits = {
-        "gpt-3.5-turbo": 4096,
         "gpt-4": 8192,
         "gpt-4-turbo": 128000,
         "gpt-4o": 128000,
@@ -242,13 +241,44 @@ def truncate_for_model(context_text: str, system_prompt: str, user_message: str,
     max_context_chars = available_tokens * 4
     
     if len(context_text) > max_context_chars:
-        truncated = context_text[:max_context_chars]
-        # Try to end at a complete section
-        last_section = truncated.rfind("----")
-        if last_section > max_context_chars * 0.8:  # If we can keep 80% of content
-            truncated = truncated[:last_section + 4]
-        
-        return truncated + "\n\n[Content truncated to fit model limits]"
+        # Smart truncation for GitHub code content
+        if "Repository:" in context_text and ("README" in context_text or "Code:" in context_text):
+            # For GitHub code, prioritize documentation over code
+            lines = context_text.split('\n')
+            important_content = []
+            current_length = 0
+            
+            # Priority order: Repository info, README sections, then code
+            for line in lines:
+                line_length = len(line) + 1  # +1 for newline
+                if current_length + line_length > max_context_chars:
+                    break
+                    
+                # Keep high-priority content
+                if any(keyword in line for keyword in [
+                    'Repository:', 'RAGFlow', '## What is', '## Key Features', 
+                    '## Get Started', 'Description:', 'README.md'
+                ]):
+                    important_content.append(line)
+                    current_length += line_length
+                elif line.strip().startswith('#') and len(line) < 100:  # Headers
+                    important_content.append(line)
+                    current_length += line_length
+                elif 'Code:' in line and current_length < max_context_chars * 0.7:  # Some code if space
+                    important_content.append(line)
+                    current_length += line_length
+            
+            truncated = '\n'.join(important_content)
+            return truncated + "\n\n[GitHub content truncated - showing key documentation]"
+        else:
+            # Standard truncation for non-GitHub content
+            truncated = context_text[:max_context_chars]
+            # Try to end at a complete section
+            last_section = truncated.rfind("----")
+            if last_section > max_context_chars * 0.8:  # If we can keep 80% of content
+                truncated = truncated[:last_section + 4]
+            
+            return truncated + "\n\n[Content truncated to fit model limits]"
     
     return context_text
 
@@ -574,7 +604,7 @@ async def advanced_rag_stream(request: ChatRequest):
             # Search existing knowledge base
             try:
                 # Use model with larger context window (define early)
-                model_to_use = "gpt-4o" if request.model in ["gpt-4", "gpt-3.5-turbo"] else request.model
+                model_to_use = "gpt-4o" if request.model == "gpt-4" else request.model
                 
                 # Auto-adjust parameters for knowledge base overview queries
                 search_limit = request.search_limit
@@ -2243,6 +2273,30 @@ async def search_more_results(request: SearchRequest, offset: int = 10):
         logger.error("Search more failed", query=request.query, offset=offset, error=str(e))
         raise HTTPException(status_code=500, detail=f"Search more failed: {str(e)}")
 
+# Debug endpoint for AI query optimization
+@app.post("/debug/optimize-query")
+async def debug_optimize_query(request: dict):
+    """Debug endpoint to test AI query optimization"""
+    try:
+        query = request.get('query', '')
+        if not query:
+            return {"error": "Query is required"}
+        
+        # Test the AI optimization with language detection
+        optimized, detected_language = await advanced_web_researcher._optimize_search_query_with_ai(query)
+        cleaned = advanced_web_researcher._clean_search_query(query)
+        
+        return {
+            "original_query": query,
+            "ai_optimized": optimized,
+            "detected_language": detected_language,
+            "rule_based_cleaned": cleaned,
+            "improvement": "AI optimization adds context, synonyms, and detects language for region-specific search"
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
 # Document listing endpoints
 @app.get("/documents/{collection_name}/original")
 async def get_original_documents(collection_name: str):
@@ -2375,7 +2429,7 @@ async def get_config():
     return ConfigResponse(
         openai_configured=bool(os.getenv('OPENAI_API_KEY')),
         github_configured=bool(os.getenv('GITHUB_TOKEN')),
-        current_model="gpt-3.5-turbo",  # Default model
+        current_model="gpt-4o",  # Default model
         search_limit=5,
         vittoriadb_url=os.getenv('VITTORIADB_URL', 'http://localhost:8080')
     )

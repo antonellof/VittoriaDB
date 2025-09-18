@@ -33,7 +33,7 @@ class ChatRequest(BaseModel):
     message: str
     chat_history: Optional[List[ChatMessage]] = []
     search_collections: Optional[List[str]] = ["documents", "web_research", "github_code"]
-    model: str = "gpt-3.5-turbo"
+    model: str = "gpt-4o"
     search_limit: int = 10  # Increased default for better overview queries
     web_search: bool = False
 

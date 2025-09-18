@@ -19,6 +19,8 @@ from ddgs import DDGS
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.extraction_strategy import LLMExtractionStrategy, CosineStrategy
 import httpx
+import openai
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +132,11 @@ class AdvancedWebResearcher:
             async with AsyncWebCrawler(config=self.browser_config) as crawler:
                 for result in search_results[:self.max_results]:
                     try:
-                        url = result['href']
+                        # DuckDuckGo returns 'href' field for URL
+                        url = result.get('href') or result.get('url')
+                        if not url:
+                            logger.warning(f"No URL found in result: {result}")
+                            continue
                         
                         # Check if URL already exists in collection
                         existing_content = None
@@ -178,7 +184,7 @@ class AdvancedWebResearcher:
                                 scraped_results.append(web_result)
                             
                     except Exception as e:
-                        logger.error(f"Failed to crawl {result['href']}: {e}")
+                        logger.error(f"Failed to crawl {result.get('href', 'unknown URL')}: {e}")
                         continue
             
             logger.info(f"✅ Successfully scraped {len(scraped_results)} results")
@@ -189,13 +195,14 @@ class AdvancedWebResearcher:
             return [
                 WebSearchResult(
                     title=result.get('title', 'No Title'),
-                    url=result['href'],
+                    url=result.get('href', result.get('url', '')),
                     snippet=result.get('body', ''),
                     content=result.get('body', ''),
                     timestamp=time.time(),
                     source="web_search"
                 )
                 for result in search_results[:self.max_results]
+                if result.get('href') or result.get('url')  # Only include results with URLs
             ]
     
     async def _search_duckduckgo(self, query: str) -> List[Dict[str, str]]:
@@ -203,16 +210,184 @@ class AdvancedWebResearcher:
         try:
             logger.info(f"🦆 Searching DuckDuckGo: {query}")
             
-            # Use DDGS for search
+            # First, optimize query using AI and detect language
+            optimized_query, detected_language = await self._optimize_search_query_with_ai(query)
+            logger.info(f"🤖 AI-optimized query: {optimized_query}")
+            logger.info(f"🌍 Detected language/region: {detected_language}")
+            
+            # Also clean query as fallback
+            cleaned_query = self._clean_search_query(query)
+            logger.info(f"🧹 Cleaned query: {cleaned_query}")
+            
+            # Use DDGS for search with retry logic
             ddgs = DDGS()
-            results = list(ddgs.text(query, max_results=self.max_results))
+            results = []
+            
+            # Try the AI-optimized query first with detected language
+            try:
+                results = list(ddgs.text(optimized_query, max_results=self.max_results, region=detected_language))
+            except Exception as e:
+                logger.warning(f"AI-optimized search failed: {e}")
+                
+                # Fallback: try cleaned query with detected language
+                try:
+                    results = list(ddgs.text(cleaned_query, max_results=self.max_results, region=detected_language))
+                except Exception as e2:
+                    logger.warning(f"Cleaned query search failed: {e2}")
+                    
+                    # Fallback: try original query with detected language
+                    try:
+                        results = list(ddgs.text(query, max_results=self.max_results, region=detected_language))
+                    except Exception as e3:
+                        logger.warning(f"Original query search failed: {e3}")
+                        
+                        # Fallback: try with US English as last resort
+                        try:
+                            results = list(ddgs.text(optimized_query, max_results=self.max_results, region='us-en'))
+                        except Exception as e4:
+                            logger.warning(f"US English fallback failed: {e4}")
+                            
+                            # Last resort: try with minimal query, no region
+                            simple_query = query.split()[:3]  # Take first 3 words
+                            if simple_query:
+                                try:
+                                    results = list(ddgs.text(' '.join(simple_query), max_results=self.max_results))
+                                except Exception as e5:
+                                    logger.error(f"All search attempts failed: {e5}")
             
             logger.info(f"Found {len(results)} DuckDuckGo results")
+            
+            # Debug: Log the actual results to see what we're getting
+            for i, result in enumerate(results):
+                logger.info(f"🔍 Result {i+1}: {result.get('title', 'No title')} - {result.get('href', 'No URL')}")
+                logger.info(f"   Snippet: {result.get('body', 'No snippet')[:100]}...")
+            
             return results
             
         except Exception as e:
             logger.error(f"DuckDuckGo search failed: {e}")
             return []
+    
+    async def _optimize_search_query_with_ai(self, query: str) -> tuple[str, str]:
+        """Use OpenAI to optimize search query and detect language for better results"""
+        try:
+            # Get OpenAI API key
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                logger.warning("No OpenAI API key found, skipping AI optimization")
+                return query, 'us-en'
+            
+            # Create OpenAI client
+            client = openai.AsyncOpenAI(api_key=api_key)
+            
+            # Enhanced system prompt with language detection
+            system_prompt = """You are a search query optimization expert with language detection capabilities. Your job is to:
+1. Detect the language of the user query
+2. Transform the query into the most effective search terms for web search engines like DuckDuckGo
+3. Return both the optimized query and the detected language
+
+LANGUAGE DETECTION:
+Detect the primary language and return the appropriate DuckDuckGo region code:
+- English → us-en
+- Italian → it-it  
+- Spanish → es-es
+- French → fr-fr
+- German → de-de
+- Portuguese → pt-br
+- Japanese → jp-jp
+- Chinese → cn-zh
+- Russian → ru-ru
+- Dutch → nl-nl
+- Korean → kr-kr
+
+OPTIMIZATION RULES:
+1. Remove question words in ANY language (how/come, what/cosa/qué, when/quando/cuándo, where/dove/dónde, why/perché/por qué, who/chi/quién, is/è/es, are/sono/son, was/era, were/erano/eran)
+2. Extract key entities, names, concepts, and topics
+3. Add relevant synonyms and alternative terms IN THE SAME LANGUAGE
+4. Add specific terms that would appear on relevant web pages
+5. Remove conversational language and make it more direct
+6. Consider adding context terms that help find authoritative sources
+7. Keep the optimized query in the SAME LANGUAGE as the original
+
+EXAMPLES:
+- "How is Ilaria Loconte?" → "Ilaria Loconte biography profile information" | us-en
+- "Come sta Ilaria Loconte?" → "Ilaria Loconte biografia profilo informazioni" | it-it
+- "¿Cómo está Ilaria Loconte?" → "Ilaria Loconte biografía perfil información" | es-es
+- "What is artificial intelligence?" → "artificial intelligence AI definition overview technology" | us-en
+- "Cos'è l'intelligenza artificiale?" → "intelligenza artificiale IA definizione panoramica tecnologia" | it-it
+- "¿Qué es la inteligencia artificial?" → "inteligencia artificial IA definición tecnología" | es-es
+
+RESPONSE FORMAT:
+Return ONLY in this exact JSON format:
+{"query": "optimized search query", "language": "region-code"}"""
+
+            user_prompt = f"Optimize this search query and detect its language: {query}"
+            
+            # Make API call
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=150,
+                temperature=0.2,
+                timeout=10.0
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            # Parse JSON response
+            try:
+                result = json.loads(result_text)
+                optimized_query = result.get('query', query).strip()
+                detected_language = result.get('language', 'us-en')
+                
+                # Validate the optimized query
+                if len(optimized_query) < 2 or len(optimized_query) > 200:
+                    logger.warning(f"AI optimization produced invalid query length: {len(optimized_query)}")
+                    return query, 'us-en'
+                
+                # Remove any quotes or special formatting that might break the search
+                optimized_query = optimized_query.replace('"', '').replace("'", "").strip()
+                
+                # Validate language code
+                valid_languages = ['us-en', 'it-it', 'es-es', 'fr-fr', 'de-de', 'pt-br', 'jp-jp', 'cn-zh', 'ru-ru', 'nl-nl', 'kr-kr']
+                if detected_language not in valid_languages:
+                    detected_language = 'us-en'
+                
+                logger.info(f"🌍 Detected language: {detected_language}")
+                return optimized_query, detected_language
+                
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse AI response as JSON: {result_text}")
+                # Fallback: assume it's just the optimized query
+                return result_text.strip(), 'us-en'
+            
+        except Exception as e:
+            logger.warning(f"AI query optimization failed: {e}")
+            return query, 'us-en'  # Return original query with default language
+    
+    def _clean_search_query(self, query: str) -> str:
+        """Clean and optimize search query for better results"""
+        # Remove question words that don't help with search
+        question_words = ['how', 'what', 'when', 'where', 'why', 'who', 'is', 'are', 'was', 'were']
+        
+        # Split query into words
+        words = query.lower().split()
+        
+        # Remove question words from the beginning
+        while words and words[0] in question_words:
+            words.pop(0)
+        
+        # Remove question marks and other punctuation
+        cleaned = ' '.join(words).replace('?', '').replace('!', '').strip()
+        
+        # If query becomes too short, return original
+        if len(cleaned) < 3:
+            return query
+            
+        return cleaned
     
     async def _crawl_url_advanced(self, 
                                  crawler: AsyncWebCrawler,
@@ -237,7 +412,7 @@ class AdvancedWebResearcher:
             elif extraction_strategy == 'llm' and query:
                 # LLM-based extraction (requires OpenAI API key)
                 strategy = LLMExtractionStrategy(
-                    provider="openai/gpt-3.5-turbo",
+                    provider="openai/gpt-4o-mini",
                     api_token=os.getenv("OPENAI_API_KEY"),
                     instruction=f"Extract the most relevant information related to: {query}"
                 )

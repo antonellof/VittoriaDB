@@ -167,7 +167,7 @@ asyncio.run(test())
 - **Streaming**: Real-time chunk delivery
 - **Context Window**: 4000 characters (configurable)
 - **Source Attribution**: Automatic citation
-- **Models**: GPT-4, GPT-3.5-turbo support
+- **Models**: GPT-4, GPT-4o, GPT-4o-mini support
 
 ## 🔄 RAG Workflow
 
