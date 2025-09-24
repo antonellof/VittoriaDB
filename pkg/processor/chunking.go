@@ -303,6 +303,8 @@ func cleanText(text string) string {
 // GetChunker returns the appropriate chunker based on strategy
 func GetChunker(strategy string) ChunkingStrategy {
 	switch strategy {
+	case "smart":
+		return NewSmartChunker()
 	case "sentence":
 		return NewSentenceChunker()
 	case "paragraph":
@@ -310,6 +312,6 @@ func GetChunker(strategy string) ChunkingStrategy {
 	case "fixed_size":
 		return NewFixedSizeChunker()
 	default:
-		return NewSentenceChunker() // Default to sentence chunking
+		return NewSmartChunker() // Default to smart chunking for better results
 	}
 }

@@ -55,10 +55,10 @@ type ProcessingConfig struct {
 // DefaultProcessingConfig returns default processing configuration
 func DefaultProcessingConfig() *ProcessingConfig {
 	return &ProcessingConfig{
-		ChunkSize:    500,
-		ChunkOverlap: 50,
+		ChunkSize:    1024, // Increased for better semantic coherence (Memvid-style)
+		ChunkOverlap: 128,  // Increased overlap for better context preservation
 		MinChunkSize: 100,
-		MaxChunkSize: 2000,
+		MaxChunkSize: 2048, // Slightly increased max size
 		Language:     "en",
 		Metadata:     make(map[string]string),
 	}
