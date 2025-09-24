@@ -6,7 +6,7 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies including development tools
+# Install system dependencies including development tools and Playwright browser dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     wget \
@@ -18,6 +18,20 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     vim \
     htop \
+    # Playwright browser dependencies
+    libnss3 \
+    libnspr4 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libxss1 \
+    libasound2 \
+    libatspi2.0-0 \
+    libgtk-3-0 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -44,6 +58,9 @@ RUN pip install --no-cache-dir \
     flake8 \
     mypy \
     ipython
+
+# Install Playwright browsers
+RUN playwright install chromium
 
 # Create necessary directories
 RUN mkdir -p /app/data /app/uploads /app/logs
