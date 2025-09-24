@@ -1,12 +1,12 @@
 # VittoriaDB RAG Web UI - Development Docker Compose
 # Optimized for development with hot reload and debugging
 
-version: '3.8'
-
 services:
   # VittoriaDB Server
   vittoriadb:
-    image: antonellof/vittoriadb:v0.4.0
+    build:
+      context: ../../
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:
@@ -41,7 +41,6 @@ services:
       - PORT=8501
       - HOST=0.0.0.0
       - LOG_LEVEL=DEBUG
-      - REDIS_URL=redis://redis:6379
       - ENVIRONMENT=development
       - PYTHONPATH=/app
     volumes:
@@ -52,8 +51,6 @@ services:
       - vittoriadb-dev-network
     depends_on:
       vittoriadb:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -112,35 +109,6 @@ services:
       retries: 3
       start_period: 60s
 
-  # Redis for caching and background tasks
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_dev_data:/data
-    networks:
-      - vittoriadb-dev-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    command: redis-server --appendonly yes
-
-  # Redis Commander for development debugging
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    ports:
-      - "8081:8081"
-    environment:
-      - REDIS_HOSTS=local:redis:6379
-    networks:
-      - vittoriadb-dev-network
-    depends_on:
-      - redis
-    restart: unless-stopped
 
 networks:
   vittoriadb-dev-network:
@@ -157,6 +125,3 @@ volumes:
   backend_dev_logs:
     driver: local
     name: backend_dev_logs
-  redis_dev_data:
-    driver: local
-    name: redis_dev_data

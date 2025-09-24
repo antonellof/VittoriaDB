@@ -1,9 +1,9 @@
-version: '3.8'
-
 services:
   # VittoriaDB Server
   vittoriadb:
-    image: antonellof/vittoriadb:v0.4.0
+    build:
+      context: ../../
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:
@@ -105,22 +105,6 @@ services:
     #           count: 1
     #           capabilities: [gpu]
 
-  # Redis for caching and background tasks
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - vittoriadb-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    command: redis-server --appendonly yes
 
 networks:
   vittoriadb-network:
@@ -137,6 +121,3 @@ volumes:
   backend_logs:
     driver: local
     name: backend_logs
-  redis_data:
-    driver: local
-    name: redis_data

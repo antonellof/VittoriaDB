@@ -1,12 +1,12 @@
 # VittoriaDB RAG Web UI - Production Docker Compose
 # Optimized for production deployment with security and performance
 
-version: '3.8'
-
 services:
   # VittoriaDB Server
   vittoriadb:
-    image: antonellof/vittoriadb:v0.4.0
+    build:
+      context: ../../
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:
@@ -51,7 +51,6 @@ services:
       - PORT=8501
       - HOST=0.0.0.0
       - LOG_LEVEL=INFO
-      - REDIS_URL=redis://redis:6379
       - ENVIRONMENT=production
     volumes:
       - ./uploads:/app/uploads:rw
@@ -60,8 +59,6 @@ services:
       - vittoriadb-network
     depends_on:
       vittoriadb:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     restart: unless-stopped
     deploy:
@@ -149,30 +146,6 @@ services:
     #           count: 1
     #           capabilities: [gpu]
 
-  # Redis for caching and background tasks
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - vittoriadb-network
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.3'
-        reservations:
-          memory: 128M
-          cpus: '0.1'
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    command: redis-server --appendonly yes --maxmemory 200mb --maxmemory-policy allkeys-lru
 
   # Nginx reverse proxy (optional, for production load balancing)
   nginx:
@@ -215,6 +188,3 @@ volumes:
   backend_logs:
     driver: local
     name: backend_prod_logs
-  redis_data:
-    driver: local
-    name: redis_prod_data
