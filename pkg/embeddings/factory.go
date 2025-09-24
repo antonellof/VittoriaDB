@@ -18,25 +18,47 @@ func (f *DefaultVectorizerFactory) CreateVectorizer(config *VectorizerConfig) (V
 		return nil, fmt.Errorf("vectorizer config cannot be nil")
 	}
 
+	var baseVectorizer Vectorizer
+	var err error
+
 	switch config.Type {
 	case VectorizerTypeNone:
 		return nil, fmt.Errorf("vectorizer type 'none' does not support automatic embedding generation")
 
 	case VectorizerTypeSentenceTransformers:
-		return NewSentenceTransformersVectorizer(config)
+		baseVectorizer, err = NewSentenceTransformersVectorizer(config)
 
 	case VectorizerTypeOpenAI:
-		return NewOpenAIVectorizer(config)
+		baseVectorizer, err = NewOpenAIVectorizer(config)
 
 	case VectorizerTypeHuggingFace:
-		return NewHuggingFaceVectorizer(config)
+		baseVectorizer, err = NewHuggingFaceVectorizer(config)
 
 	case VectorizerTypeOllama:
-		return NewOllamaVectorizer(config)
+		baseVectorizer, err = NewOllamaVectorizer(config)
 
 	default:
 		return nil, fmt.Errorf("unsupported vectorizer type: %s", config.Type.String())
 	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if enhanced batch processing is enabled (default: true)
+	enableEnhanced := true
+	if config.Options != nil {
+		if enhanced, ok := config.Options["enable_enhanced_processing"].(bool); ok {
+			enableEnhanced = enhanced
+		}
+	}
+
+	// Wrap with enhanced vectorizer for better batch processing
+	if enableEnhanced {
+		return NewEnhancedVectorizer(baseVectorizer, config), nil
+	}
+
+	return baseVectorizer, nil
 }
 
 // SupportedTypes returns the list of supported vectorizer types
