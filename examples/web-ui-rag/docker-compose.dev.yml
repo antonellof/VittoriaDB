@@ -1,3 +1,6 @@
+# VittoriaDB RAG Web UI - Development Docker Compose
+# Optimized for development with hot reload and debugging
+
 version: '3.8'
 
 services:
@@ -10,11 +13,11 @@ services:
       - VITTORIADB_HOST=0.0.0.0
       - VITTORIADB_PORT=8080
       - VITTORIADB_DATA_DIR=/data
-      - VITTORIADB_LOG_LEVEL=INFO
+      - VITTORIADB_LOG_LEVEL=DEBUG
     volumes:
-      - vittoriadb_data:/data
+      - vittoriadb_dev_data:/data
     networks:
-      - vittoriadb-network
+      - vittoriadb-dev-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -23,28 +26,34 @@ services:
       retries: 3
       start_period: 30s
 
-  # VittoriaDB RAG Backend
+  # VittoriaDB RAG Backend (Development)
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     ports:
       - "8501:8501"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
       - VITTORIADB_URL=http://vittoriadb:8080
-      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - OLLAMA_URL=http://ollama:11434
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - PORT=8501
       - HOST=0.0.0.0
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=DEBUG
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app
     volumes:
-      - ./uploads:/app/uploads  # File uploads
-      - backend_logs:/app/logs  # Backend logs
+      - ./backend:/app:rw  # Mount source code for hot reload
+      - ./uploads:/app/uploads:rw
+      - backend_dev_logs:/app/logs:rw
     networks:
-      - vittoriadb-network
+      - vittoriadb-dev-network
     depends_on:
       vittoriadb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -54,22 +63,27 @@ services:
       retries: 3
       start_period: 60s
 
-  # Next.js Frontend
+  # Next.js Frontend (Development)
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     ports:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8501
       - NEXT_PUBLIC_WS_URL=ws://localhost:8501
-      - NODE_ENV=production
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./frontend:/app:rw  # Mount source code for hot reload
+      - /app/node_modules   # Anonymous volume for node_modules
+      - /app/.next          # Anonymous volume for .next
     depends_on:
       backend:
         condition: service_healthy
     networks:
-      - vittoriadb-network
+      - vittoriadb-dev-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
@@ -78,32 +92,25 @@ services:
       retries: 3
       start_period: 30s
 
-  # Optional: Ollama service (uncomment to run Ollama in Docker)
+  # Ollama service for local embeddings
   ollama:
     image: ollama/ollama:latest
     ports:
       - "11434:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      - ollama_dev_data:/root/.ollama
     networks:
-      - vittoriadb-network
+      - vittoriadb-dev-network
     restart: unless-stopped
     environment:
       - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_DEBUG=1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
-    # Uncomment for GPU support
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
 
   # Redis for caching and background tasks
   redis:
@@ -111,9 +118,9 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - redis_dev_data:/data
     networks:
-      - vittoriadb-network
+      - vittoriadb-dev-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -122,21 +129,34 @@ services:
       retries: 3
     command: redis-server --appendonly yes
 
+  # Redis Commander for development debugging
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    networks:
+      - vittoriadb-dev-network
+    depends_on:
+      - redis
+    restart: unless-stopped
+
 networks:
-  vittoriadb-network:
+  vittoriadb-dev-network:
     driver: bridge
-    name: vittoriadb-network
+    name: vittoriadb-dev-network
 
 volumes:
-  vittoriadb_data:
+  vittoriadb_dev_data:
     driver: local
-    name: vittoriadb_data
-  ollama_data:
+    name: vittoriadb_dev_data
+  ollama_dev_data:
     driver: local
-    name: ollama_data
-  backend_logs:
+    name: ollama_dev_data
+  backend_dev_logs:
     driver: local
-    name: backend_logs
-  redis_data:
+    name: backend_dev_logs
+  redis_dev_data:
     driver: local
-    name: redis_data
+    name: redis_dev_data
