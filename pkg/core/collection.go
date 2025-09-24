@@ -26,6 +26,7 @@ type VittoriaCollection struct {
 	closed         bool
 	vectorizer     embeddings.Vectorizer
 	contentStorage *ContentStorageConfig
+	searchEngine   *ParallelSearchEngine // Enhanced search capabilities
 }
 
 // CollectionMetadata represents collection metadata stored on disk
@@ -53,6 +54,9 @@ func NewCollection(name string, dimensions int, metric DistanceMetric, indexType
 		contentStorage: DefaultContentStorageConfig(),
 	}
 
+	// Initialize parallel search engine
+	collection.searchEngine = NewParallelSearchEngine(collection, DefaultParallelSearchConfig())
+
 	return collection, nil
 }
 
@@ -73,6 +77,9 @@ func NewCollectionWithContentStorage(name string, dimensions int, metric Distanc
 		modified:       time.Now(),
 		contentStorage: contentStorage,
 	}
+
+	// Initialize parallel search engine
+	collection.searchEngine = NewParallelSearchEngine(collection, DefaultParallelSearchConfig())
 
 	return collection, nil
 }
@@ -361,12 +368,23 @@ func (c *VittoriaCollection) Delete(ctx context.Context, id string) error {
 
 // Search performs vector similarity search
 func (c *VittoriaCollection) Search(ctx context.Context, req *SearchRequest) (*SearchResponse, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	if c.closed {
 		return nil, fmt.Errorf("collection is closed")
 	}
+
+	// Use parallel search engine if available
+	if c.searchEngine != nil {
+		return c.searchEngine.Search(ctx, req)
+	}
+
+	// Fallback to original implementation
+	return c.legacySearch(ctx, req)
+}
+
+// legacySearch provides the original search implementation as fallback
+func (c *VittoriaCollection) legacySearch(ctx context.Context, req *SearchRequest) (*SearchResponse, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	startTime := time.Now()
 
@@ -779,7 +797,12 @@ func (c *VittoriaCollection) SearchText(ctx context.Context, query string, limit
 		return nil, fmt.Errorf("no vectorizer configured for collection '%s'", c.name)
 	}
 
-	// Generate embedding from query text
+	// Use parallel search engine if available
+	if c.searchEngine != nil {
+		return c.searchEngine.SearchText(ctx, query, limit, filter)
+	}
+
+	// Fallback to original implementation
 	queryEmbedding, err := c.vectorizer.GenerateEmbedding(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate query embedding: %w", err)
@@ -811,4 +834,25 @@ func (c *VittoriaCollection) GetVectorizer() embeddings.Vectorizer {
 // SetVectorizer sets the collection's vectorizer
 func (c *VittoriaCollection) SetVectorizer(vectorizer embeddings.Vectorizer) {
 	c.vectorizer = vectorizer
+}
+
+// GetSearchEngine returns the parallel search engine
+func (c *VittoriaCollection) GetSearchEngine() *ParallelSearchEngine {
+	return c.searchEngine
+}
+
+// GetSearchStats returns search performance statistics
+func (c *VittoriaCollection) GetSearchStats() *ParallelSearchStats {
+	if c.searchEngine == nil {
+		return nil
+	}
+	stats := c.searchEngine.GetStats()
+	return &stats
+}
+
+// ClearSearchCache clears the search cache
+func (c *VittoriaCollection) ClearSearchCache() {
+	if c.searchEngine != nil {
+		c.searchEngine.ClearCache()
+	}
 }
