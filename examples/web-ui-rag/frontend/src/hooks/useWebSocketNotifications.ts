@@ -22,9 +22,42 @@ interface ProcessingStatus {
   error?: string
 }
 
+interface GitHubIndexingStatus {
+  indexing_id: string
+  repo_url: string
+  status: 'indexing' | 'completed' | 'error'
+  progress?: number
+  message?: string
+  files_indexed?: number
+  repository?: string
+  processing_time?: number
+  error?: string
+}
+
+interface WebResearchStatus {
+  research_id: string
+  query: string
+  status: 'researching' | 'completed' | 'error'
+  progress?: number
+  message?: string
+  urls_found?: number
+  urls_scraped?: number
+  results_stored?: number
+  processing_time?: number
+  error?: string
+  results?: Array<{
+    title: string
+    url: string
+    content_preview: string
+    status: 'found' | 'scraping' | 'scraped' | 'stored' | 'error'
+  }>
+}
+
 export function useWebSocketNotifications() {
   const [isConnected, setIsConnected] = useState(false)
   const [processingFiles, setProcessingFiles] = useState<Map<string, ProcessingStatus>>(new Map())
+  const [githubIndexing, setGithubIndexing] = useState<Map<string, GitHubIndexingStatus>>(new Map())
+  const [webResearch, setWebResearch] = useState<Map<string, WebResearchStatus>>(new Map())
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const { setStats, setHealth, setCollectionUpdating } = useStatsStore()
@@ -185,6 +218,148 @@ export function useWebSocketNotifications() {
         console.log('WebSocket status:', notification.data.status)
         break
 
+      case 'github_indexing_start':
+        const githubStartData = notification.data
+        const githubStatus: GitHubIndexingStatus = {
+          indexing_id: githubStartData.indexing_id,
+          repo_url: githubStartData.repo_url,
+          status: 'indexing',
+          progress: 0,
+          message: githubStartData.message
+        }
+        setGithubIndexing(prev => new Map(prev.set(githubStartData.indexing_id, githubStatus)))
+        toast.loading(`🔗 ${githubStartData.message}`, { 
+          id: githubStartData.indexing_id,
+          duration: Infinity 
+        })
+        setCollectionUpdating('github_code', true)
+        break
+
+      case 'github_indexing_progress':
+        const githubProgressData = notification.data
+        setGithubIndexing(prev => {
+          const newMap = new Map(prev)
+          const existing = newMap.get(githubProgressData.indexing_id)
+          if (existing) {
+            newMap.set(githubProgressData.indexing_id, {
+              ...existing,
+              progress: githubProgressData.progress,
+              message: githubProgressData.message
+            })
+          }
+          return newMap
+        })
+        
+        // Update toast with progress
+        toast.loading(`⚙️ ${githubProgressData.message} (${githubProgressData.progress}%)`, {
+          id: githubProgressData.indexing_id,
+          duration: Infinity
+        })
+        break
+
+      case 'github_indexing_complete':
+        const githubCompleteData = notification.data
+        setGithubIndexing(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(githubCompleteData.indexing_id)
+          return newMap
+        })
+        
+        toast.success(`✅ ${githubCompleteData.message}`, {
+          id: githubCompleteData.indexing_id,
+          duration: 6000
+        })
+        setCollectionUpdating('github_code', false)
+        break
+
+      case 'github_indexing_error':
+        const githubErrorData = notification.data
+        setGithubIndexing(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(githubErrorData.indexing_id)
+          return newMap
+        })
+        
+        toast.error(`❌ ${githubErrorData.message}`, {
+          id: githubErrorData.indexing_id,
+          duration: 8000
+        })
+        setCollectionUpdating('github_code', false)
+        break
+
+      case 'web_research_start':
+        const webStartData = notification.data
+        const webStatus: WebResearchStatus = {
+          research_id: webStartData.research_id,
+          query: webStartData.query,
+          status: 'researching',
+          progress: 0,
+          message: webStartData.message,
+          results: []
+        }
+        setWebResearch(prev => new Map(prev.set(webStartData.research_id, webStatus)))
+        toast.loading(`🌐 ${webStartData.message}`, { 
+          id: webStartData.research_id,
+          duration: Infinity 
+        })
+        setCollectionUpdating('web_research', true)
+        break
+
+      case 'web_research_progress':
+        const webProgressData = notification.data
+        setWebResearch(prev => {
+          const newMap = new Map(prev)
+          const existing = newMap.get(webProgressData.research_id)
+          if (existing) {
+            newMap.set(webProgressData.research_id, {
+              ...existing,
+              progress: webProgressData.progress,
+              message: webProgressData.message,
+              urls_found: webProgressData.urls_found,
+              urls_scraped: webProgressData.urls_scraped,
+              results_stored: webProgressData.results_stored,
+              results: webProgressData.results || existing.results
+            })
+          }
+          return newMap
+        })
+        
+        toast.loading(`🌐 ${webProgressData.message}`, {
+          id: webProgressData.research_id,
+          duration: Infinity
+        })
+        break
+
+      case 'web_research_complete':
+        const webCompleteData = notification.data
+        setWebResearch(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(webCompleteData.research_id)
+          return newMap
+        })
+        
+        toast.success(`✅ ${webCompleteData.message}`, {
+          id: webCompleteData.research_id,
+          duration: 6000
+        })
+        setCollectionUpdating('web_research', false)
+        break
+
+      case 'web_research_error':
+        const webErrorData = notification.data
+        setWebResearch(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(webErrorData.research_id)
+          return newMap
+        })
+        
+        toast.error(`❌ ${webErrorData.message}`, {
+          id: webErrorData.research_id,
+          duration: 8000
+        })
+        setCollectionUpdating('web_research', false)
+        break
+
       default:
         console.log('Unknown notification type:', notification.type)
     }
@@ -222,6 +397,8 @@ export function useWebSocketNotifications() {
   return {
     isConnected,
     processingFiles: Array.from(processingFiles.values()),
+    githubIndexing: Array.from(githubIndexing.values()),
+    webResearch: Array.from(webResearch.values()),
     connect,
     disconnect,
     requestProcessingStatus

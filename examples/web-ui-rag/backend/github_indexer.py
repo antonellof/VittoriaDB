@@ -16,6 +16,9 @@ import re
 from github import Github
 import git
 
+# Import chunking function from rag_system
+from rag_system import chunk_text
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -263,15 +266,23 @@ class GitHubIndexer:
     
     async def store_repository(self, 
                              github_repo: GitHubRepository,
-                             rag_system) -> List[str]:
-        """Store repository files in VittoriaDB"""
+                             rag_system,
+                             progress_callback=None) -> List[str]:
+        """Store repository files in VittoriaDB with batch operations for better performance"""
         
+        total_files = len(github_repo.files)
+        batch_size = 10  # Process files in batches of 10
         stored_ids = []
         
+        if progress_callback:
+            await progress_callback(55, f"Preparing {total_files} files for batch processing...")
+        
+        # Prepare all documents for batch insertion
+        documents = []
         for code_file in github_repo.files:
             try:
                 # Create content for storage
-                content = f"""
+                full_content = f"""
 Repository: {github_repo.owner}/{github_repo.name}
 File: {code_file.path}
 Language: {code_file.language}
@@ -281,8 +292,8 @@ Code:
 {code_file.content}
                 """.strip()
                 
-                # Create metadata
-                metadata = {
+                # Create base metadata
+                base_metadata = {
                     'type': 'github_code',
                     'repository': f"{github_repo.owner}/{github_repo.name}",
                     'repository_url': github_repo.url,
@@ -297,38 +308,99 @@ Code:
                     'title': f"{github_repo.name}/{code_file.path}"
                 }
                 
-                # Store in VittoriaDB
-                doc_id = await rag_system.add_document(
-                    content=content,
-                    metadata=metadata,
+                # Chunk large files to fit within OpenAI token limits
+                chunks = chunk_text(full_content, max_tokens=6000, overlap=200)
+                
+                if len(chunks) == 1:
+                    # Single chunk - use original approach
+                    documents.append({
+                        'content': full_content,
+                        'metadata': base_metadata
+                    })
+                else:
+                    # Multiple chunks - create separate documents for each chunk
+                    for i, chunk in enumerate(chunks):
+                        chunk_metadata = {
+                            **base_metadata,
+                            'chunk_index': i,
+                            'total_chunks': len(chunks),
+                            'is_chunk': True,
+                            'original_file_id': f"{github_repo.name}_{code_file.path}".replace('/', '_'),
+                            'title': f"{github_repo.name}/{code_file.path} (chunk {i+1}/{len(chunks)})"
+                        }
+                        
+                        documents.append({
+                            'content': chunk,
+                            'metadata': chunk_metadata
+                        })
+                
+            except Exception as e:
+                logger.error(f"Failed to prepare code file {code_file.path}: {e}")
+        
+        # Process documents in batches
+        total_batches = (len(documents) + batch_size - 1) // batch_size
+        
+        for batch_idx in range(0, len(documents), batch_size):
+            batch_docs = documents[batch_idx:batch_idx + batch_size]
+            batch_num = (batch_idx // batch_size) + 1
+            
+            try:
+                if progress_callback:
+                    progress = 60 + int((batch_num - 1) / total_batches * 30)  # 60-90% range
+                    await progress_callback(progress, f"Processing batch {batch_num}/{total_batches} ({len(batch_docs)} files)...")
+                
+                # Use batch insertion for better performance
+                batch_ids = await rag_system.add_documents_batch(
+                    documents=batch_docs,
                     collection_name='github_code'
                 )
                 
-                stored_ids.append(doc_id)
+                stored_ids.extend(batch_ids)
                 
             except Exception as e:
-                logger.error(f"Failed to store code file {code_file.path}: {e}")
+                logger.error(f"Failed to store batch {batch_num}: {e}")
+                # Fallback to individual insertion for this batch
+                for doc in batch_docs:
+                    try:
+                        doc_id = await rag_system.add_document(
+                            content=doc['content'],
+                            metadata=doc['metadata'],
+                            collection_name='github_code'
+                        )
+                        stored_ids.append(doc_id)
+                    except Exception as fallback_error:
+                        logger.error(f"Failed to store individual document: {fallback_error}")
         
-        logger.info(f"✅ Stored {len(stored_ids)} code files from {github_repo.owner}/{github_repo.name}")
+        logger.info(f"✅ Stored {len(stored_ids)} code files from {github_repo.owner}/{github_repo.name} using batch processing")
         return stored_ids
     
     async def index_and_store(self, 
                             repo_url: str,
-                            rag_system) -> Dict[str, Any]:
-        """Complete GitHub indexing workflow"""
+                            rag_system,
+                            progress_callback=None) -> Dict[str, Any]:
+        """Complete GitHub indexing workflow with progress callbacks"""
         
         start_time = time.time()
         
         try:
+            if progress_callback:
+                await progress_callback(20, "Fetching repository information...")
+            
             # Index repository
             github_repo = await self.index_repository(repo_url)
             
-            # Store in VittoriaDB
-            stored_ids = await self.store_repository(github_repo, rag_system)
+            if progress_callback:
+                await progress_callback(50, f"Processing {len(github_repo.files)} files...")
+            
+            # Store in VittoriaDB with progress updates
+            stored_ids = await self.store_repository(github_repo, rag_system, progress_callback)
+            
+            if progress_callback:
+                await progress_callback(95, "Finalizing indexing...")
             
             processing_time = time.time() - start_time
             
-            return {
+            result = {
                 'success': True,
                 'message': f'Successfully indexed and stored {len(stored_ids)} files',
                 'repository': f"{github_repo.owner}/{github_repo.name}",
@@ -339,6 +411,11 @@ Code:
                 'repository_stars': github_repo.stars,
                 'processing_time': processing_time
             }
+            
+            if progress_callback:
+                await progress_callback(100, "Indexing completed successfully!")
+                
+            return result
             
         except Exception as e:
             logger.error(f"GitHub indexing failed: {e}")

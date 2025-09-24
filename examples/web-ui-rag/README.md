@@ -41,7 +41,74 @@ A complete ChatGPT-like web interface built with React + Streamlit, powered by V
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### 🐳 Docker Setup (Recommended)
+
+The easiest way to run the complete RAG system with all dependencies:
+
+```bash
+# 1. Clone and navigate to the web UI directory
+cd examples/web-ui-rag
+
+# 2. Configure environment variables
+cp env.example .env
+# Edit .env with your API keys (OpenAI, HuggingFace, etc.)
+
+# 3. Start all services with Docker Compose
+./run-dev.sh    # For development
+# OR
+./run-prod.sh   # For production
+```
+
+**What's included:**
+- ✅ **VittoriaDB**: Vector database with HNSW indexing (built locally)
+- ✅ **Backend**: FastAPI with RAG, web research, and file processing
+- ✅ **Frontend**: React UI with real-time chat interface
+- ✅ **Ollama**: Local LLM inference (optional, for offline usage)
+- ✅ **Chromium**: Web scraping with Playwright/Crawl4AI (fully configured)
+- ✅ **Docker Compose**: Complete orchestration with health checks
+- ✅ **No Redis**: Simplified architecture using FastAPI BackgroundTasks
+
+### 📋 Environment Configuration
+
+Copy and configure the environment file:
+
+```bash
+cp env.example .env
+```
+
+**Required API Keys:**
+```bash
+# OpenAI (for embeddings and chat) - REQUIRED
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Optional: GitHub (for repository indexing and higher rate limits)
+GITHUB_TOKEN=your_github_token_here
+
+# Service URLs (default values work for Docker Compose)
+VITTORIADB_URL=http://localhost:8080
+OLLAMA_URL=http://localhost:11434
+NEXT_PUBLIC_API_URL=http://localhost:8501
+```
+
+**Docker Compose Files:**
+- `docker-compose.dev.yml` - Development with hot reload
+- `docker-compose.yml` - Standard setup
+- `docker-compose.prod.yml` - Production optimized
+
+### 🎯 Access Points
+
+Once running, access the application at:
+
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8501
+- **VittoriaDB**: http://localhost:8080
+- **Ollama**: http://localhost:11434
+
+### 🛠️ Manual Setup (Alternative)
+
+If you prefer to run without Docker:
+
+#### Prerequisites
 
 ```bash
 # Install VittoriaDB Python SDK
@@ -56,7 +123,7 @@ ollama pull nomic-embed-text
 # https://nodejs.org/
 ```
 
-### Backend Setup
+#### Backend Setup
 
 ```bash
 cd backend
@@ -64,19 +131,13 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-### Frontend Setup
+#### Frontend Setup
 
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-### Access the Application
-
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8501
-- **VittoriaDB**: http://localhost:8080
 
 ## 📖 Usage
 
@@ -133,12 +194,47 @@ OLLAMA_URL=http://localhost:11434
 NEXT_PUBLIC_API_URL=http://localhost:8501
 ```
 
+## 🐳 Docker Architecture
+
+The Docker setup includes several optimizations and fixes:
+
+### ✅ **What's Fixed:**
+- **Chromium Browser**: Fully configured with Playwright for web scraping
+- **VittoriaDB Build**: Local build instead of non-existent external image
+- **Redis Removed**: Simplified architecture using FastAPI BackgroundTasks
+- **Vectorizer Config**: Proper collection initialization with embeddings
+- **Build Optimization**: Reduced Docker context from 3.74GB → 438KB
+- **Go Version**: Updated to 1.24 to match project requirements
+
+### 🏗️ **Service Architecture:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Frontend (React + Next.js)                    Port 3000    │
+└─────────────────┬───────────────────────────────────────────┘
+                  │ HTTP/WebSocket
+┌─────────────────▼───────────────────────────────────────────┐
+│ Backend (FastAPI + Streamlit)                 Port 8501    │
+│ ├─ RAG System with VittoriaDB integration                  │
+│ ├─ Web Research with Chromium/Crawl4AI                     │
+│ ├─ File Processing (PDF, DOCX, TXT, MD, HTML)              │
+│ └─ GitHub Repository Indexing                              │
+└─────────────────┬───────────────────────────────────────────┘
+                  │ Python SDK
+┌─────────────────▼───────────────────────────────────────────┐
+│ VittoriaDB (Local Build)                      Port 8080    │
+│ ├─ Vector Storage with HNSW Indexing                       │
+│ ├─ OpenAI/Ollama Embeddings Integration                    │
+│ └─ ACID-compliant Persistence                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## 📊 Performance
 
 - **File Processing**: ~1-2 seconds per document
-- **Web Research**: ~3-5 seconds per query
+- **Web Research**: ~20-30 seconds per query (with Chromium rendering)
 - **Vector Search**: <100ms response time
 - **Chat Response**: ~1-3 seconds with streaming
+- **Docker Build**: ~2-3 minutes (with caching)
 
 ## 🤝 Contributing
 

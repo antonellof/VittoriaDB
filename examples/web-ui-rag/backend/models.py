@@ -33,8 +33,8 @@ class ChatRequest(BaseModel):
     message: str
     chat_history: Optional[List[ChatMessage]] = []
     search_collections: Optional[List[str]] = ["documents", "web_research", "github_code"]
-    model: str = "gpt-3.5-turbo"
-    search_limit: int = 5
+    model: str = "gpt-4o"
+    search_limit: int = 10  # Increased default for better overview queries
     web_search: bool = False
 
 class ChatResponse(BaseModel):
@@ -76,7 +76,7 @@ class WebResearchResponse(BaseModel):
     results_count: int
     stored_count: int
     processing_time: float
-    results: List[Dict[str, str]]
+    results: List[Dict[str, Any]]
 
 class GitHubIndexRequest(BaseModel):
     """GitHub repository indexing request"""
@@ -154,6 +154,9 @@ class SearchResponse(BaseModel):
     results: List[SearchResult]
     total_results: int
     processing_time: float
+    is_overview_query: bool = False
+    displayed_results: int = 0
+    has_more: bool = False
 
 class ConfigUpdate(BaseModel):
     """Configuration update request"""

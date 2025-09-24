@@ -45,7 +45,6 @@
 
 - **[📦 Installation Guide](docs/installation.md)** - Complete installation instructions for all platforms
 - **[🚀 Quick Start](#-quick-start)** - Get started in 30 seconds
-- **[🌐 Web UI RAG Application](examples/web-ui-rag/README.md)** - **NEW!** Complete ChatGPT-like interface
 - **[🐍 Python SDK](https://pypi.org/project/vittoriadb/)** - Official Python package on PyPI (`pip install vittoriadb`)
 - **[📚 Content Storage](docs/content-storage.md)** - **NEW!** Built-in content storage for RAG workflows
 - **[🤖 Embedding Services](docs/embeddings.md)** - Complete guide to auto_embeddings() and vectorizers
@@ -100,19 +99,7 @@ cd VittoriaDB/sdk/python && ./install-dev.sh
 
 ## 🚀 Quick Start
 
-### 🌐 Web UI Demo (NEW!)
-```bash
-# 1. Clone and start the complete RAG application
-git clone https://github.com/antonellof/VittoriaDB.git
-cd VittoriaDB/examples/web-ui-rag && ./start.sh
-
-# 2. Open the ChatGPT-like interface
-open http://localhost:3000
-
-# 3. Upload documents, ask questions, and get AI-powered responses!
-```
-
-### 30-Second API Demo
+### 30-Second Demo
 ```bash
 # 1. Start VittoriaDB
 vittoriadb run
@@ -327,6 +314,26 @@ VittoriaDB is a single-process binary that combines an HTTP server, vector engin
 > 📖 **See [Performance Guide](docs/performance.md) for detailed architecture diagrams and performance characteristics.**
 
 ## 📖 Usage Examples
+
+### 🐳 Complete RAG Web Application
+
+The [`examples/web-ui-rag/`](examples/web-ui-rag/) directory contains a **production-ready ChatGPT-like web interface** with Docker Compose:
+
+**Features:**
+- 💬 **ChatGPT-like Interface**: Real-time streaming responses
+- 📁 **File Upload**: PDF, DOCX, TXT, MD, HTML processing
+- 🌐 **Web Research**: Automatic web scraping with Chromium
+- 👨‍💻 **GitHub Indexing**: Repository code search
+- 🧠 **Advanced RAG**: Context-aware responses with VittoriaDB
+
+```bash
+# One-command setup
+cd examples/web-ui-rag
+cp env.example .env  # Add your OpenAI API key
+./run-dev.sh         # Start everything with Docker
+```
+
+### 📚 Code Examples by Language
 
 The [`examples/`](examples/) directory contains comprehensive examples organized by language:
 

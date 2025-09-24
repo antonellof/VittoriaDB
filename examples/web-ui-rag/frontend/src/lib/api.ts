@@ -128,11 +128,138 @@ class APIClient {
     return response.data
   }
 
-  // Get WebSocket URL
+  // Get WebSocket URL for chat
   getWebSocketURL(): string {
     const wsProtocol = this.baseURL.startsWith('https') ? 'wss' : 'ws'
     const wsURL = this.baseURL.replace(/^https?/, wsProtocol)
     return `${wsURL}/ws/chat`
+  }
+
+  // Get WebSocket URL for notifications  
+  getNotificationWebSocketURL(): string {
+    const wsProtocol = this.baseURL.startsWith('https') ? 'wss' : 'ws'
+    const wsURL = this.baseURL.replace(/^https?/, wsProtocol)
+    return `${wsURL}/ws/notifications`
+  }
+
+  // Get original documents (grouped by source file)
+  async getOriginalDocuments(collection: string): Promise<{
+    success: boolean
+    collection: string
+    documents: Array<{
+      document_id: string
+      filename: string
+      title: string
+      file_type: string
+      upload_timestamp: number
+      content_hash: string
+      collection: string
+      chunks: Array<{
+        chunk_id: string
+        content_preview: string
+        score: number
+        metadata: Record<string, any>
+      }>
+      total_chunks: number
+      total_size: number
+    }>
+    count: number
+  }> {
+    const response = await fetch(`${this.baseURL}/documents/${collection}/original`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`Get original documents failed: ${error}`)
+    }
+
+    return response.json()
+  }
+
+  // List document chunks in collection (without embeddings)
+  async listDocuments(collection: string, limit: number = 200): Promise<{
+    success: boolean
+    collection: string
+    documents: Array<{
+      id: string
+      metadata: Record<string, any>
+      score: number
+      content?: string
+    }>
+    count: number
+  }> {
+    const response = await fetch(`${this.baseURL}/documents/${collection}?limit=${limit}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`List failed: ${error}`)
+    }
+
+    return response.json()
+  }
+
+  // Delete document by ID (simple and fast)
+  async deleteDocumentById(collection: string, documentId: string): Promise<{
+    success: boolean
+    message: string
+    document_id: string
+    collection: string
+  }> {
+    const response = await fetch(`${this.baseURL}/documents/${collection}/${documentId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`Delete failed: ${error}`)
+    }
+
+    return response.json()
+  }
+
+  // Delete document from collection (legacy method using metadata)
+  async deleteDocument(params: {
+    collection: string
+    filename?: string
+    title?: string
+    url?: string
+  }): Promise<{
+    success: boolean
+    message: string
+    deleted_chunks: number
+    deleted_documents: string[]
+    collection: string
+  }> {
+    const queryParams = new URLSearchParams()
+    if (params.filename) queryParams.append('filename', params.filename)
+    if (params.title) queryParams.append('title', params.title)
+    if (params.url) queryParams.append('url', params.url)
+
+    const response = await fetch(`${this.baseURL}/documents/${params.collection}?${queryParams}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`Delete failed: ${error}`)
+    }
+
+    return response.json()
   }
 }
 
@@ -193,6 +320,14 @@ export class WebSocketClient {
     } else {
       console.error('❌ WebSocket not connected')
     }
+  }
+
+  // Send web research request
+  sendWebResearch(request: { query: string; search_engine?: string; max_results?: number }): void {
+    this.send({
+      type: 'web_research',
+      ...request
+    })
   }
 
   onMessage(callback: (data: any) => void): void {

@@ -93,9 +93,10 @@ import {
 import { nanoid } from 'nanoid'
 import { useTheme } from 'next-themes'
 import { Toaster } from 'react-hot-toast'
-import { useStatsStore } from '@/store'
+import { useStatsStore, useChatStore } from '@/store'
 import { SettingsPanel } from '@/components/settings-panel'
 import { DataSourcesPanel } from '@/components/data-sources-panel'
+import { DocumentsViewer } from '@/components/documents-viewer'
 import { apiClient } from '@/lib/api'
 import { useWebSocketNotifications } from '@/hooks/useWebSocketNotifications'
 import { cn } from '@/lib/utils'
@@ -104,7 +105,14 @@ import toast from 'react-hot-toast'
 type MessageType = {
   key: string
   from: 'user' | 'assistant'
-  sources?: { href: string; title: string }[]
+  sources?: { href: string; title: string; score?: number; source?: string }[]
+  sourcesInfo?: {
+    total_sources: number
+    displayed_sources: number
+    has_more_sources: boolean
+    is_overview_query: boolean
+  }
+  suggestions?: string[]
   versions: {
     id: string
     content: string
@@ -172,6 +180,7 @@ export default function Home() {
   const { } = useTheme()
   const { stats, health } = useStatsStore()
   const { isConnected, processingFiles } = useWebSocketNotifications()
+  const { connectWebSocket, isConnected: chatConnected } = useChatStore()
 
   // Drag & drop for file upload
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -497,6 +506,33 @@ export default function Home() {
               } else if (data.type === 'search_progress') {
                 // Add search progress message
                 setSearchProgress(prev => [...prev, data.message])
+              } else if (data.type === 'suggestions') {
+                // Add suggestions to the assistant message
+                setMessages(prev => 
+                  prev.map(msg => 
+                    msg.key === assistantMsg.key 
+                      ? { ...msg, suggestions: data.suggestions }
+                      : msg
+                  )
+                )
+              } else if (data.type === 'sources') {
+                // Add sources to the assistant message
+                setMessages(prev => 
+                  prev.map(msg => 
+                    msg.key === assistantMsg.key 
+                      ? { 
+                          ...msg, 
+                          sources: data.sources,
+                          sourcesInfo: {
+                            total_sources: data.total_sources || 0,
+                            displayed_sources: data.displayed_sources || 0,
+                            has_more_sources: data.has_more_sources || false,
+                            is_overview_query: data.is_overview_query || false
+                          }
+                        }
+                      : msg
+                  )
+                )
               } else if (data.type === 'content') {
                 // Update assistant message content with immediate flush
                 flushSync(() => {
@@ -557,6 +593,11 @@ export default function Home() {
 
   // Initialize app and create initial session if needed
   useEffect(() => {
+    // Connect to chat WebSocket for web research functionality
+    connectWebSocket().catch(error => {
+      console.warn('Failed to connect chat WebSocket:', error)
+    })
+    
     // Create initial session if auto-save is enabled and no session exists
     if (autoSaveEnabled && !currentSessionId) {
       createNewChatSession('Welcome Chat').then(sessionId => {
@@ -568,7 +609,7 @@ export default function Home() {
         console.warn('Failed to create welcome session:', error)
       })
     }
-  }, [autoSaveEnabled, currentSessionId])
+  }, [autoSaveEnabled, currentSessionId, connectWebSocket])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -991,21 +1032,56 @@ export default function Home() {
                 
                 {collectionsExpanded && stats?.collections ? (
                   <div className="space-y-2">
-                    {Object.entries(stats.collections).map(([name, collection]) => (
-                      <div key={name} className="bg-muted/50 rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium capitalize">
-                            {name.replace('_', ' ')}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {collection.vector_count} docs
-                          </span>
+                    {Object.entries(stats.collections).map(([name, collection]) => {
+                      const getCollectionIcon = (collectionName: string) => {
+                        switch (collectionName) {
+                          case 'documents': return FileIcon
+                          case 'web_research': return GlobeIcon
+                          case 'github_code': return Code
+                          case 'chat_history': return MessageSquare
+                          default: return Database
+                        }
+                      }
+
+                      const getCollectionTitle = (collectionName: string) => {
+                        switch (collectionName) {
+                          case 'documents': return 'Documents'
+                          case 'web_research': return 'Web Research'
+                          case 'github_code': return 'GitHub Code'
+                          case 'chat_history': return 'Chat History'
+                          default: return collectionName.replace('_', ' ')
+                        }
+                      }
+
+                      return (
+                        <div key={name} className="bg-muted/50 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium capitalize">
+                              {name.replace('_', ' ')}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {collection.vector_count} docs
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-2">
+                            {collection.dimensions}D • {collection.index_type?.toUpperCase() || 'FLAT'} • {collection.metric}
+                          </div>
+                          
+                          {collection.vector_count > 0 && (
+                            <DocumentsViewer
+                              collectionName={name}
+                              collectionTitle={getCollectionTitle(name)}
+                              icon={getCollectionIcon(name)}
+                              trigger={
+                                <Button variant="ghost" size="sm" className="w-full justify-start h-7 text-xs">
+                                  View Sources
+                                </Button>
+                              }
+                            />
+                          )}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {collection.dimensions}D • {collection.index_type?.toUpperCase() || 'FLAT'} • {collection.metric}
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground">
@@ -1193,6 +1269,7 @@ export default function Home() {
                           <Message
                             from={message.from}
                             key={`${message.key}-${version.id}`}
+                            className="message-container"
                           >
                             <div>
                               {message.sources?.length && (
@@ -1348,11 +1425,35 @@ export default function Home() {
                                 <MessageContent
                                   className={cn(
                                     "group-[.is-user]:rounded-[24px] group-[.is-user]:bg-secondary group-[.is-user]:text-foreground",
-                                    "group-[.is-assistant]:bg-transparent group-[.is-assistant]:p-0 group-[.is-assistant]:text-foreground"
+                                    "group-[.is-assistant]:bg-transparent group-[.is-assistant]:p-0 group-[.is-assistant]:text-foreground",
+                                    // Only add overflow handling, don't override width constraints
+                                    "overflow-hidden"
                                   )}
                                 >
                                   <Response>{version.content}</Response>
                                 </MessageContent>
+                              )}
+                              
+                              {/* Show suggestions for assistant messages */}
+                              {message.from === 'assistant' && message.suggestions && message.suggestions.length > 0 && (
+                                <div className="mt-4">
+                                  <Suggestions>
+                                    {message.suggestions.map((suggestion, index) => (
+                                      <Suggestion
+                                        key={index}
+                                        suggestion={suggestion}
+                                        onClick={(suggestion) => {
+                                          setText(suggestion)
+                                          // Auto-submit the suggestion
+                                          setTimeout(() => {
+                                            const submitEvent = new Event('submit', { bubbles: true, cancelable: true })
+                                            document.querySelector('form')?.dispatchEvent(submitEvent)
+                                          }, 100)
+                                        }}
+                                      />
+                                    ))}
+                                  </Suggestions>
+                                </div>
                               )}
                             </div>
                           </Message>

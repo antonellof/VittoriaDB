@@ -1,0 +1,91 @@
+# VittoriaDB Docker ignore file
+# Reduce build context size and improve build performance
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build artifacts
+build/
+dist/
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go specific
+*.test
+*.prof
+coverage.out
+coverage.html
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Node.js (for examples)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Data directories
+data/
+*.db
+*.sqlite
+
+# Documentation build
+docs/_build/
+
+# Release artifacts
+releases/
+*.tar.gz
+*.zip
+
+# Test data
+test_data/
+large_test_document.txt
+
+# Examples that shouldn't be in the main build
+examples/web-ui-rag/
+examples/documents/
+examples/python/
+examples/go/
+
+# SDK
+sdk/
+
+# Project documentation
+project/
+*.md
+!README.md
+
+# Docker files (avoid recursion)
+Dockerfile*
+docker-compose*.yml
+.dockerignore

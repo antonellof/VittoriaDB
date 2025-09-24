@@ -208,14 +208,24 @@ class VittoriaRAGEngine:
         """
         self.vittoriadb_url = vittoriadb_url
         self.collection_name = collection_name
+        self.openai_api_key = openai_api_key
         self.db = None
         self.collection = None
         
-        # Initialize embedding model
-        logger.info(f"Loading embedding model: {embedding_model}")
-        self.embedding_model = SentenceTransformer(embedding_model)
-        self.embedding_dim = self.embedding_model.get_sentence_embedding_dimension()
-        logger.info(f"Embedding model loaded: {self.embedding_dim} dimensions")
+        # Initialize embedding model - use OpenAI for consistency with collections
+        if openai_api_key:
+            logger.info("Using OpenAI embeddings for consistency with collections")
+            self.openai_client = openai.AsyncOpenAI(api_key=openai_api_key)  # Use async client
+            self.embedding_model = None  # Use OpenAI instead
+            self.embedding_dim = 1536  # OpenAI text-embedding-ada-002 dimensions
+            self.use_openai_embeddings = True
+            logger.info(f"OpenAI embeddings configured: {self.embedding_dim} dimensions")
+        else:
+            logger.info(f"Loading local embedding model: {embedding_model}")
+            self.embedding_model = SentenceTransformer(embedding_model)
+            self.embedding_dim = self.embedding_model.get_sentence_embedding_dimension()
+            self.use_openai_embeddings = False
+            logger.info(f"Local embedding model loaded: {self.embedding_dim} dimensions")
         
         # Initialize chunker
         self.chunker = DocumentChunker(chunk_size=1000, chunk_overlap=200)
@@ -253,7 +263,9 @@ class VittoriaRAGEngine:
                         "ef_construction": 200,
                         "ef_search": 50
                     },
-                    vectorizer_config=Configure.Vectors.auto_embeddings(
+                    vectorizer_config=Configure.Vectors.openai_embeddings(
+                        api_key=self.openai_api_key
+                    ) if self.use_openai_embeddings else Configure.Vectors.auto_embeddings(
                         model="all-MiniLM-L6-v2",
                         dimensions=self.embedding_dim
                     )
@@ -321,7 +333,16 @@ class VittoriaRAGEngine:
     async def _store_chunk_with_auto_embedding(self, chunk: DocumentChunk):
         """Store chunk using client-side embedding generation for speed."""
         # Generate embedding client-side (FAST)
-        chunk_embedding = self.embedding_model.encode(chunk.content).tolist()
+        if self.use_openai_embeddings:
+            # Use OpenAI embeddings for consistency with collections
+            response = await self.openai_client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=chunk.content
+            )
+            chunk_embedding = response.data[0].embedding
+        else:
+            # Use local sentence transformers
+            chunk_embedding = self.embedding_model.encode(chunk.content).tolist()
         
         # Prepare metadata for storage (include content for retrieval)
         chunk_metadata = {
@@ -364,7 +385,16 @@ class VittoriaRAGEngine:
         try:
             # Generate query embedding client-side for FAST search
             embed_start = time.time()
-            query_embedding = self.embedding_model.encode(query).tolist()
+            if self.use_openai_embeddings:
+                # Use OpenAI embeddings for consistency with collections
+                response = await self.openai_client.embeddings.create(
+                    model="text-embedding-ada-002",
+                    input=query
+                )
+                query_embedding = response.data[0].embedding
+            else:
+                # Use local sentence transformers
+                query_embedding = self.embedding_model.encode(query).tolist()
             embed_time = time.time() - embed_start
             
             # Search across multiple collections
