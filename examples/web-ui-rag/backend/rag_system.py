@@ -199,9 +199,43 @@ class RAGSystem:
                     logger.info(f"✅ Collection '{name}' ready with HNSW indexing")
                 except Exception as e:
                     if "already exists" in str(e):
-                        # Collection exists, get reference
-                        self.collections[name] = self.db.get_collection(name)
-                        logger.info(f"✅ Collection '{name}' loaded")
+                        # Collection exists, but it might not have vectorizer configured
+                        # Try to get the collection and check if it has vectorizer
+                        try:
+                            existing_collection = self.db.get_collection(name)
+                            # Test if vectorizer is configured by trying to insert a test text
+                            test_id = f"test_{int(time.time())}"
+                            try:
+                                existing_collection.insert_text(test_id, "test", {"test": True})
+                                # If successful, delete the test document and use the collection
+                                existing_collection.delete(test_id)
+                                self.collections[name] = existing_collection
+                                logger.info(f"✅ Collection '{name}' loaded with existing vectorizer")
+                            except Exception as vectorizer_error:
+                                if "does not have vectorizer configured" in str(vectorizer_error):
+                                    # Collection exists but has no vectorizer, delete and recreate
+                                    logger.warning(f"⚠️ Collection '{name}' exists but has no vectorizer, recreating...")
+                                    self.db.delete_collection(name)
+                                    
+                                    # Recreate with vectorizer
+                                    collection = self.db.create_collection(
+                                        name=name,
+                                        dimensions=config['dimensions'],
+                                        metric=DistanceMetric.COSINE,
+                                        index_type=IndexType.HNSW,
+                                        config={
+                                            "m": 16,
+                                            "ef_construction": 200,
+                                            "ef_search": 50
+                                        },
+                                        vectorizer_config=vectorizer_config
+                                    )
+                                    self.collections[name] = collection
+                                    logger.info(f"✅ Collection '{name}' recreated with vectorizer")
+                                else:
+                                    raise vectorizer_error
+                        except Exception as get_error:
+                            logger.error(f"❌ Failed to handle existing collection '{name}': {get_error}")
                     else:
                         logger.error(f"❌ Failed to create collection '{name}': {e}")
                         
