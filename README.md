@@ -34,6 +34,7 @@
 
 - **[📦 Installation Guide](docs/installation.md)** - Complete installation instructions for all platforms
 - **[🚀 Quick Start](#-quick-start)** - Get started in 30 seconds
+- **[🐳 Docker RAG Demo](examples/web-ui-rag/)** - Complete ChatGPT-like web UI with Docker Compose
 - **[🐍 Python SDK](https://pypi.org/project/vittoriadb/)** - Official Python package on PyPI (`pip install vittoriadb`)
 - **[🤖 Embedding Services](docs/embeddings.md)** - Complete guide to auto_embeddings() and vectorizers
 - **[📖 Usage Examples](#-usage-examples)** - Python, Go, and cURL examples
@@ -74,7 +75,29 @@ cd VittoriaDB/sdk/python && ./install-dev.sh
 
 ## 🚀 Quick Start
 
-### 30-Second Demo
+### 🐳 Complete RAG Demo (Docker)
+
+Try the full ChatGPT-like web interface with one command:
+
+```bash
+# Clone and run the complete RAG system
+git clone https://github.com/antonellof/VittoriaDB.git
+cd VittoriaDB/examples/web-ui-rag
+
+# Configure environment
+cp env.example .env
+# Edit .env with your OpenAI API key
+
+# Start everything with Docker Compose
+./run-dev.sh
+```
+
+**Access the demo:**
+- **Web UI**: http://localhost:3000 (ChatGPT-like interface)
+- **API**: http://localhost:8501 (FastAPI backend)
+- **VittoriaDB**: http://localhost:8080 (Vector database)
+
+### 30-Second CLI Demo
 ```bash
 # 1. Start VittoriaDB
 vittoriadb run
@@ -280,6 +303,26 @@ VittoriaDB is a single-process binary that combines an HTTP server, vector engin
 > 📖 **See [Performance Guide](docs/performance.md) for detailed architecture diagrams and performance characteristics.**
 
 ## 📖 Usage Examples
+
+### 🐳 Complete RAG Web Application
+
+The [`examples/web-ui-rag/`](examples/web-ui-rag/) directory contains a **production-ready ChatGPT-like web interface** with Docker Compose:
+
+**Features:**
+- 💬 **ChatGPT-like Interface**: Real-time streaming responses
+- 📁 **File Upload**: PDF, DOCX, TXT, MD, HTML processing
+- 🌐 **Web Research**: Automatic web scraping with Chromium
+- 👨‍💻 **GitHub Indexing**: Repository code search
+- 🧠 **Advanced RAG**: Context-aware responses with VittoriaDB
+
+```bash
+# One-command setup
+cd examples/web-ui-rag
+cp env.example .env  # Add your OpenAI API key
+./run-dev.sh         # Start everything with Docker
+```
+
+### 📚 Code Examples by Language
 
 The [`examples/`](examples/) directory contains comprehensive examples organized by language:
 
