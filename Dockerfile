@@ -21,7 +21,7 @@ COPY . .
 
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags "-X main.version=0.4.0 -w -s" \
+    -ldflags "-X main.version=0.5.0 -w -s" \
     -o vittoriadb \
     ./cmd/vittoriadb
 

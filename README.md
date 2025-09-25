@@ -8,7 +8,7 @@
 
 **VittoriaDB** is a high-performance, embedded vector database designed for local AI development and production deployments. Built with simplicity and performance in mind, it provides a zero-configuration solution for vector similarity search, perfect for RAG applications, semantic search, and AI prototyping.
 
-**🆕 NEW in v0.4.0:** Complete ChatGPT-like web interface with built-in content storage for production-ready RAG applications!
+**🆕 NEW in v0.5.0:** Unified configuration system, I/O optimization with up to 276x speedup, parallel search engine, and smart chunking for production-ready AI applications!
 
 ## 🎯 Why VittoriaDB?
 
@@ -18,7 +18,7 @@
 
 ## ✨ Key Features
 
-### 🌐 **Complete RAG Web Application (NEW in v0.4.0)**
+### 🌐 **Complete RAG Web Application (Enhanced in v0.5.0)**
 - **💬 ChatGPT-like Interface**: Modern web UI with real-time streaming responses
 - **📁 Multi-Format Document Processing**: PDF, DOCX, TXT, MD, HTML support
 - **🌐 Intelligent Web Research**: Real-time search with automatic knowledge storage
@@ -40,6 +40,14 @@
 - **🧠 AI-Ready**: Built for RAG, semantic search, and embedding workflows
 - **📦 Single Binary**: No dependencies, cross-platform support
 - **🔒 Local First**: Keep your data private and secure
+
+### 🚀 **NEW in v0.5.0: Performance & Configuration Revolution**
+- **🔧 Unified Configuration**: YAML, environment variables, CLI flags with intelligent precedence
+- **⚡ I/O Optimization**: Memory-mapped storage, SIMD operations, async I/O (up to 276x speedup)
+- **🔄 Parallel Search**: Configurable worker pools with 5-32x performance improvements
+- **🧠 Smart Chunking**: Sentence-aware text segmentation with abbreviation handling
+- **🔧 Enhanced Batch Processing**: Intelligent error recovery and fallback mechanisms
+- **📊 Configuration API**: Runtime configuration inspection via HTTP endpoint
 
 ## 📚 Documentation
 
@@ -67,10 +75,10 @@ curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/
 ### Manual Installation
 ```bash
 # Download for your platform from GitHub Releases
-wget https://github.com/antonellof/VittoriaDB/releases/download/v0.4.0/vittoriadb-v0.4.0-linux-amd64.tar.gz
-tar -xzf vittoriadb-v0.4.0-linux-amd64.tar.gz
-chmod +x vittoriadb-v0.4.0-linux-amd64
-./vittoriadb-v0.4.0-linux-amd64 run
+wget https://github.com/antonellof/VittoriaDB/releases/download/v0.5.0/vittoriadb-v0.5.0-linux-amd64.tar.gz
+tar -xzf vittoriadb-v0.5.0-linux-amd64.tar.gz
+chmod +x vittoriadb-v0.5.0-linux-amd64
+./vittoriadb-v0.5.0-linux-amd64 run
 ```
 
 ### 🌐 Web UI RAG Application (NEW!)
@@ -508,12 +516,15 @@ curl http://localhost:8080/config
 
 ## 🎯 Performance
 
-### Benchmarks (v0.2.0)
-- **Insert Speed**: >2.6M vectors/second (HNSW)
-- **Search Speed**: <1ms latency (sub-millisecond for optimized queries)
-- **Memory Usage**: Linear scaling - 1MB for 1K vectors, 167MB for 50K vectors
+### Benchmarks (v0.5.0)
+- **Insert Speed**: >15,000 vectors/second (improved from 10,000 with batch processing)
+- **Search Speed**: Sub-100 microsecond search times for cached results (improved from 1ms)
+- **Memory Usage**: 40% reduction with memory-mapped storage
+- **Parallel Search**: 5-32x speedup for large datasets
+- **I/O Optimization**: Up to 276x speedup with combined optimizations
+- **SIMD Operations**: Up to 7.7x speedup for vector processing
 - **Startup Time**: <100ms cold start
-- **Binary Size**: ~8MB compressed
+- **Binary Size**: ~10MB compressed
 
 ### Comprehensive Performance Results
 📊 **[View Complete Benchmark Results](https://gist.github.com/antonellof/19069bb56573fcf72ce592b3c2f2fc74)** - Detailed performance testing with Native Go SDK integration
