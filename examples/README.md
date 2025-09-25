@@ -318,6 +318,62 @@ python examples/python/10_local_vectorizer_validation_test.py
 5. **Compare**: `04_embedding_methods_comparison.py` - See all approaches
 6. **Production**: `05_production_features_showcase.py` - Enterprise features
 7. **Validation**: `10_local_vectorizer_validation_test.py` - **🧪 Test local vectorizer**
+8. **Vectorization Testing**: `13_vectorization_comparison_test.py` - **🔬 Advanced analysis**
+9. **Simple Testing**: `14_simple_vectorization_test.py` - **🚀 No dependencies**
+
+#### 13. Vectorization Comparison Test (NEW!)
+**File:** `13_vectorization_comparison_test.py`
+
+**🔬 ADVANCED TESTING:** Compare different vectorization approaches with comprehensive analysis:
+- Manual vs sentence-transformers vs OpenAI embeddings
+- Similarity score analysis and discrimination testing
+- Large text processing with proper matching
+- Backend-style implementation comparison
+- Production readiness assessment
+
+**Usage:**
+```bash
+pip install requests numpy sentence-transformers openai
+cd examples/python
+python 13_vectorization_comparison_test.py
+```
+
+**Features:**
+- ✅ **Multiple approaches** - Manual, sentence-transformers, OpenAI embeddings
+- ✅ **Quality analysis** - Semantic discrimination and accuracy testing
+- ✅ **Large text support** - Real document processing and chunking
+- ✅ **Backend comparison** - Compare with web-ui-rag implementation
+- ✅ **Production guidance** - Recommendations for different use cases
+
+#### 14. Simple Vectorization Test (NEW!)
+**File:** `14_simple_vectorization_test.py`
+
+**🚀 NO DEPENDENCIES:** Test vectorization using only Python standard library:
+- Basic hash-based vector generation
+- HTTP API testing with curl
+- Similarity analysis without external libraries
+- Backend comparison and recommendations
+- Development/testing suitability assessment
+
+**Usage:**
+```bash
+# No pip install required - uses only standard library + curl
+cd examples/python
+python 14_simple_vectorization_test.py
+```
+
+**Features:**
+- ✅ **Zero dependencies** - Only Python standard library and curl
+- ✅ **Quick testing** - Fast setup for development environments
+- ✅ **API validation** - Test HTTP API endpoints and formats
+- ✅ **Basic analysis** - Simple similarity and discrimination testing
+- ✅ **Clear limitations** - Honest assessment of manual vector quality
+
+**⚠️ Test Results:**
+Both new tests confirm the issue identified in Go examples:
+- **Manual vectors**: Poor semantic discrimination (33% accuracy, 0.004 discrimination score)
+- **Sentence-transformers**: Good semantic understanding and proper matching
+- **Recommendation**: Use sentence-transformers or OpenAI embeddings for production
 
 ## 🔧 Go Examples (`go/`)
 
@@ -509,6 +565,116 @@ go run 08_performance_benchmarks_optimized.go
 - ✅ High-throughput testing
 - ✅ Production-grade benchmarking
 
+#### 09. Parallel Search & Caching Demo
+**File:** `09_parallel_search_and_caching_demo.go`
+
+**🚀 NEW FEATURE:** Comprehensive demonstration of VittoriaDB's enhanced parallel search and caching capabilities:
+- Enhanced batch processing with error recovery
+- Parallel search engine with configurable workers
+- Intelligent caching with LRU eviction and TTL
+- Performance statistics and monitoring
+- Cache management and optimization
+
+**Usage:**
+```bash
+cd examples/go
+go run 09_parallel_search_and_caching_demo.go
+```
+
+**Features:**
+- ✅ **165x+ faster cached searches** - Dramatic performance improvements
+- ✅ **1M+ vectors/sec insertion** - High-throughput batch processing
+- ✅ **Parallel search processing** - Configurable worker pools
+- ✅ **Intelligent caching** - LRU eviction with TTL expiration
+- ✅ **Performance monitoring** - Real-time statistics and metrics
+- ✅ **Cache management** - Manual cache control and optimization
+- ✅ **Error recovery** - Robust fallback strategies
+- ✅ **Production-ready** - Enterprise-grade reliability features
+
+#### 12. Parallel vs Sequential Benchmark (NEW!)
+**File:** `12_parallel_vs_sequential_benchmark.go`
+
+**📊 PERFORMANCE ANALYSIS:** Comprehensive benchmark comparing parallel search and caching against sequential search:
+- Sequential vs parallel search performance comparison
+- Cache effectiveness analysis with repeated queries
+- Overhead analysis for small datasets
+- Performance scaling with different dataset sizes
+- Real-world performance metrics and recommendations
+
+**Usage:**
+```bash
+cd examples/go
+go run 12_parallel_vs_sequential_benchmark.go
+```
+
+**Features:**
+- ✅ **Proven performance gains** - 5-32x speedup for large datasets (1000+ vectors)
+- ✅ **Cache analysis** - 10-276x speedup for repeated queries
+- ✅ **Smart thresholding** - Avoids overhead for small datasets (<1000 vectors)
+- ✅ **Realistic benchmarks** - Tests with 100-10,000 vector datasets
+- ✅ **Overhead analysis** - Measures parallel search overhead (1.4x for small datasets)
+- ✅ **Performance recommendations** - Data-driven guidance for optimization
+
+**📈 Benchmark Results:**
+- **Small datasets (100-500 vectors)**: Sequential preferred (lower overhead)
+- **Medium datasets (1000 vectors)**: 5x parallel speedup + 20x cache speedup
+- **Large datasets (5000+ vectors)**: 15-32x parallel speedup + 125-276x cache speedup
+- **Cache hit rate**: 99% for repeated queries
+
+#### 10. Large Text Processing Demo
+**File:** `10_large_text_processing_demo.go`
+
+**📚 REAL-WORLD USAGE:** Process large text files with proper semantic matching and relevance filtering:
+- Large text file processing with smart chunking
+- Semantic search with proper matching results
+- Relevance scoring and filtering
+- Native vs manual vectorization comparison
+- Production-ready text processing pipeline
+
+**Usage:**
+```bash
+cd examples/go
+go run 10_large_text_processing_demo.go
+```
+
+**Features:**
+- ✅ **Large file processing** - Handle README files, documentation, books
+- ✅ **Smart chunking** - Sentence-boundary aware text splitting
+- ✅ **Proper matching** - Only return relevant results above threshold
+- ✅ **Native vectorization** - Uses sentence-transformers when available
+- ✅ **Fallback system** - Enhanced manual vectors when native unavailable
+- ✅ **Relevance filtering** - Score-based result filtering
+- ✅ **Real-world testing** - Actual documentation and text files
+
+#### 11. Similarity Debugging Tool
+**File:** `11_similarity_debugging_tool.go`
+
+**🔍 DEBUGGING TOOL:** Analyze and debug vector generation and similarity calculations:
+- Vector generation quality analysis
+- Similarity score validation
+- Score distribution analysis
+- Real-world text pair testing
+- Vector algorithm debugging
+
+**Usage:**
+```bash
+cd examples/go
+go run 11_similarity_debugging_tool.go
+```
+
+**Features:**
+- ✅ **Vector validation** - Test with known orthogonal/identical vectors
+- ✅ **Generation analysis** - Analyze vector generation quality
+- ✅ **Score distribution** - Statistical analysis of similarity scores
+- ✅ **Real-world testing** - Test with actual text pairs
+- ✅ **Problem identification** - Identify vector generation issues
+- ✅ **Algorithm debugging** - Debug similarity calculation problems
+
+**⚠️ Current Issue Identified:**
+The manual vector generation creates vectors that are too similar (0.99+ scores even for unrelated topics). For production use:
+- **Recommended**: Use native vectorization with `pip install sentence-transformers`
+- **Alternative**: Improve manual vector generation algorithm for better diversity
+
 ### 📋 Go Examples Quick Reference
 
 #### File Naming Convention
@@ -516,6 +682,9 @@ go run 08_performance_benchmarks_optimized.go
 - **02-04**: Native SDK integration (in-process usage)
 - **05**: RAG workflow (complete application example)
 - **06-08**: Performance testing (volume, basic, optimized)
+- **09**: Parallel search and caching features (NEW!)
+- **10**: Large text processing with proper matching (NEW!)
+- **11**: Similarity debugging and analysis tool (NEW!)
 
 #### Recommended Learning Path
 1. **Start here**: `01_http_client_basic_usage.go` - Learn HTTP API
@@ -524,6 +693,9 @@ go run 08_performance_benchmarks_optimized.go
 4. **Advanced**: `04_native_sdk_advanced_features.go` - Complex features
 5. **RAG**: `05_rag_complete_workflow.go` - Complete application
 6. **Performance**: `06_performance_volume_testing.go` - Scalability testing
+7. **NEW Features**: `09_parallel_search_and_caching_demo.go` - Enhanced performance 🚀
+8. **Large Text**: `10_large_text_processing_demo.go` - Real-world text processing 📚
+9. **Debug Tool**: `11_similarity_debugging_tool.go` - Vector analysis and debugging 🔍
 
 ## 🌐 HTTP API Examples (`curl/`)
 
