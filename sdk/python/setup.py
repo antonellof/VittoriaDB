@@ -37,7 +37,7 @@ class PostInstallCommand(install):
             return
         
         # Download URL (GitHub releases)
-        version = "v0.1.0"
+        version = "v0.5.0"
         url = f"https://github.com/antonellof/VittoriaDB/releases/download/{version}/{binary_name}"
         
         # Local path
@@ -85,7 +85,7 @@ def read_version():
 setup(
     name="vittoriadb",
     version=read_version(),
-    description="Simple embedded vector database for local AI development with automatic embeddings",
+    description="High-performance vector database with unified configuration, I/O optimization, and automatic embeddings",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
     author="VittoriaDB Team",
@@ -144,7 +144,7 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.7",
-    keywords="vector database, embeddings, similarity search, AI, machine learning, RAG",
+    keywords="vector database, embeddings, similarity search, AI, machine learning, RAG, SIMD, parallel search, configuration, performance",
     include_package_data=True,
     package_data={
         "vittoriadb": ["binaries/*"],

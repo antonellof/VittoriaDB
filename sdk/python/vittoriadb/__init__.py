@@ -55,6 +55,8 @@ from .types import (
     VectorizerType,
     VectorizerConfig,
     ContentStorageConfig,
+    UnifiedConfig,
+    ConfigurationInfo,
     VittoriaDBError,
     ConnectionError,
     CollectionError,
@@ -64,7 +66,7 @@ from .types import (
 )
 from . import configure
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __author__ = "VittoriaDB Team"
 __email__ = "team@vittoriadb.dev"
 
@@ -80,6 +82,8 @@ __all__ = [
     "VectorizerType",
     "VectorizerConfig",
     "ContentStorageConfig",
+    "UnifiedConfig",
+    "ConfigurationInfo",
     "VittoriaDBError",
     "ConnectionError",
     "CollectionError",

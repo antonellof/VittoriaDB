@@ -40,7 +40,8 @@ class VittoriaDB:
                  auto_start: bool = True,
                  port: int = 8080,
                  host: str = "localhost",
-                 data_dir: Optional[str] = None):
+                 data_dir: Optional[str] = None,
+                 extra_args: Optional[List[str]] = None):
         """Initialize VittoriaDB client.
         
         Args:
@@ -49,12 +50,14 @@ class VittoriaDB:
             port: Port to use for auto-started server
             host: Host to bind auto-started server to
             data_dir: Data directory for auto-started server
+            extra_args: Additional command-line arguments for auto-started server
         """
         self.url = url or f"http://{host}:{port}"
         self.auto_start = auto_start
         self.port = port
         self.host = host
         self.data_dir = data_dir or "./data"
+        self.extra_args = extra_args or []
         self.process = None
         self.auto_started = False
         
@@ -75,6 +78,10 @@ class VittoriaDB:
                 "--port", str(self.port),
                 "--data-dir", self.data_dir
             ]
+            
+            # Add extra arguments if provided
+            if self.extra_args:
+                cmd.extend(self.extra_args)
             
             self.process = subprocess.Popen(
                 cmd,
@@ -260,6 +267,11 @@ class VittoriaDB:
         data = self._handle_response(response)
         
         return DatabaseStats.from_dict(data)
+    
+    def config(self) -> Dict[str, Any]:
+        """Get current server configuration (v0.5.0+)."""
+        response = self._make_request("GET", "/config")
+        return self._handle_response(response)
     
     def close(self) -> None:
         """Close connection and cleanup."""

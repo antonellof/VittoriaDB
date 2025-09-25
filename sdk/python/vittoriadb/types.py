@@ -308,3 +308,60 @@ class SearchError(VittoriaDBError):
 class BinaryError(VittoriaDBError):
     """Raised when binary management fails."""
     pass
+
+
+@dataclass
+class UnifiedConfig:
+    """Unified configuration for VittoriaDB v0.5.0+."""
+    server: Optional[Dict[str, Any]] = None
+    storage: Optional[Dict[str, Any]] = None
+    search: Optional[Dict[str, Any]] = None
+    embeddings: Optional[Dict[str, Any]] = None
+    performance: Optional[Dict[str, Any]] = None
+    log: Optional[Dict[str, Any]] = None
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'UnifiedConfig':
+        """Create UnifiedConfig from dictionary."""
+        return cls(
+            server=data.get("server"),
+            storage=data.get("storage"),
+            search=data.get("search"),
+            embeddings=data.get("embeddings"),
+            performance=data.get("performance"),
+            log=data.get("log")
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
+        result = {}
+        if self.server is not None:
+            result["server"] = self.server
+        if self.storage is not None:
+            result["storage"] = self.storage
+        if self.search is not None:
+            result["search"] = self.search
+        if self.embeddings is not None:
+            result["embeddings"] = self.embeddings
+        if self.performance is not None:
+            result["performance"] = self.performance
+        if self.log is not None:
+            result["log"] = self.log
+        return result
+
+
+@dataclass
+class ConfigurationInfo:
+    """Information about VittoriaDB configuration (v0.5.0+)."""
+    config: UnifiedConfig
+    metadata: Dict[str, Any]
+    feature_flags: Dict[str, bool]
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ConfigurationInfo':
+        """Create ConfigurationInfo from dictionary."""
+        return cls(
+            config=UnifiedConfig.from_dict(data.get("config", {})),
+            metadata=data.get("metadata", {}),
+            feature_flags=data.get("feature_flags", {})
+        )

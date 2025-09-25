@@ -25,7 +25,12 @@ The Python SDK can either:
 - **⚡ High Performance**: HNSW indexing provides sub-millisecond search times
 - **🐍 Pythonic API**: Clean, intuitive Python interface with type hints
 - **🔌 Dual Mode**: Works with existing servers or auto-starts local instances
-- **🤖 RAG-Ready (NEW v0.4.0)**: Built-in content storage for Retrieval-Augmented Generation
+- **🤖 RAG-Ready**: Built-in content storage for Retrieval-Augmented Generation
+- **🚀 NEW v0.5.0**: Unified configuration system with YAML, env vars, and CLI support
+- **⚡ NEW v0.5.0**: I/O optimization with memory-mapped storage and SIMD operations
+- **🔧 NEW v0.5.0**: Enhanced batch processing with intelligent error recovery
+- **🧠 NEW v0.5.0**: Smart chunking with sentence-aware text segmentation
+- **🔄 NEW v0.5.0**: Parallel search engine with configurable worker pools and caching
 
 ## 📦 Installation
 
@@ -396,12 +401,59 @@ results = collection.search_text(
 )
 ```
 
+## 🔧 Configuration Management (NEW v0.5.0)
+
+VittoriaDB v0.5.0 introduces a powerful unified configuration system that supports YAML files, environment variables, and CLI flags with intelligent precedence.
+
+### Configuration Inspection
+```python
+import vittoriadb
+
+# Connect to VittoriaDB
+db = vittoriadb.connect()
+
+# Get current configuration
+config_info = db.config()
+
+print("Server Configuration:")
+print(f"  Host: {config_info['config']['server']['host']}")
+print(f"  Port: {config_info['config']['server']['port']}")
+
+print("Performance Features:")
+print(f"  Parallel Search: {config_info['feature_flags']['parallel_search']}")
+print(f"  Search Cache: {config_info['feature_flags']['search_cache']}")
+print(f"  Memory-Mapped I/O: {config_info['feature_flags']['mmap_storage']}")
+print(f"  SIMD Optimizations: {config_info['feature_flags']['simd_optimizations']}")
+
+db.close()
+```
+
+### Advanced Server Configuration
+```python
+# Start server with custom configuration
+db = vittoriadb.connect(
+    auto_start=True,
+    port=9090,
+    host="localhost",
+    data_dir="./my_vectors",
+    # Additional server arguments can be passed
+    extra_args=[
+        "--config", "my-config.yaml",  # Use YAML configuration
+        "--log-level", "debug",        # Enable debug logging
+        "--parallel-workers", "16"     # Set parallel search workers
+    ]
+)
+```
+
 ## 📊 Performance and Scalability
 
 - **Insert Speed**: >10,000 vectors/second with flat indexing, >5,000 with HNSW
 - **Search Speed**: Sub-millisecond search times for 1M vectors using HNSW
 - **Memory Usage**: <100MB for 100,000 vectors (384 dimensions)
 - **Scalability**: Tested up to 1 million vectors, supports up to 2,048 dimensions
+- **🚀 NEW v0.5.0**: Up to 276x speedup with combined I/O optimizations
+- **🚀 NEW v0.5.0**: 5-32x faster parallel search for large datasets
+- **🚀 NEW v0.5.0**: SIMD operations provide up to 7.7x vector processing speedup
 
 
 ## 📋 API Reference
@@ -418,13 +470,15 @@ results = collection.search_text(
 - `delete(id)` - Delete vector by ID
 - `count()` - Get total vector count
 
-### VittoriaDB Class (Enhanced v0.4.0)
+### VittoriaDB Class (Enhanced v0.5.0)
 - `connect(url=None, auto_start=True, **kwargs)` - Connect to VittoriaDB
 - `create_collection(name, dimensions, metric="cosine", vectorizer_config=None, content_storage=None)` - Create collection with content storage
 - `get_collection(name)` - Get existing collection
 - `list_collections()` - List all collections
 - `delete_collection(name)` - Delete collection
 - `health()` - Get server health status
+- `stats()` - Get database statistics
+- `config()` - Get current server configuration (NEW v0.5.0)
 - `close()` - Close connection
 
 ## 🤝 Contributing
@@ -452,25 +506,39 @@ This project is licensed under the MIT License - see the [LICENSE](../../LICENSE
 - 🌐 **Distributed Mode**: Multi-node clustering support
 - 📊 **Analytics**: Query performance monitoring and optimization
 - 🎯 **More Vectorizers**: Support for additional embedding models
-- 🗜️ **Content Compression**: Compress stored content to save space
 
-## 📝 Changelog v0.4.0
+## 📝 Changelog v0.5.0
 
-### 🆕 New Features
-- **🤖 Built-in Content Storage**: Automatic preservation of original text for RAG applications
-- **📋 ContentStorageConfig**: Configurable content storage with size limits and field names
-- **🔍 Enhanced Search**: New `include_content` parameter for content retrieval
-- **📊 Collection Info**: Content storage configuration in collection metadata
+### 🆕 Major New Features
+- **🔧 Unified Configuration System**: Complete YAML, environment variables, and CLI flags support with intelligent precedence
+- **⚡ I/O Optimization Suite**: Memory-mapped storage, SIMD operations, and async I/O for up to 276x performance improvements
+- **🔄 Parallel Search Engine**: Configurable worker pools with 5-32x speedup for large datasets
+- **🧠 Smart Chunking**: Sentence-aware text segmentation with abbreviation handling
+- **🔧 Enhanced Batch Processing**: Intelligent error recovery and fallback mechanisms
+- **📊 Configuration API**: New `/config` endpoint for runtime configuration inspection
 
-### 🔧 Enhancements
-- **⚡ Better RAG Support**: No external storage required for RAG workflows
-- **🎯 Improved API**: Enhanced search methods with content retrieval options
-- **📚 Updated Documentation**: Comprehensive RAG examples and best practices
+### 🚀 Performance Improvements
+- **SIMD Vector Operations**: Up to 7.7x speedup for vector processing
+- **Memory-Mapped I/O**: Zero-copy operations with microsecond latency
+- **Search Caching**: LRU cache with TTL expiration for frequently accessed results
+- **Batch Processing**: Robust error handling with individual fallback processing
+
+### 🔧 Developer Experience
+- **Configuration Management**: CLI tools for generating, validating, and inspecting configurations
+- **Hot-Reloading**: Dynamic configuration updates without server restart
+- **Comprehensive Documentation**: Updated guides for all new features
+- **Enhanced Examples**: New demos showcasing v0.5.0 capabilities
 
 ### 🔄 Backward Compatibility
 - All existing APIs work unchanged
-- Content storage is optional and configurable
-- Default behavior maintains compatibility with v0.3.x
+- Zero configuration setup continues to work seamlessly
+- Automatic migration from legacy configurations
+- Default behavior maintains full compatibility with v0.4.x
+
+### 🐛 Bug Fixes
+- Fixed Windows compatibility with fallback I/O implementation
+- Improved error handling in batch processing workflows
+- Enhanced stability in parallel search operations
 
 ---
 
