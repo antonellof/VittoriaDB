@@ -1,0 +1,95 @@
+# VittoriaDB Configuration File
+# This file contains all configuration options for VittoriaDB
+# Environment variables can override these settings using the VITTORIA_ prefix
+
+# Server Configuration
+server:
+  host: "localhost"          # Server host address
+  port: 8080                    # Server port number
+  read_timeout: 30s      # HTTP read timeout
+  write_timeout: 30s     # HTTP write timeout
+  max_body_size: 33554432        # Maximum request body size (bytes)
+  cors: true                   # Enable CORS support
+  tls:
+    enabled: false           # Enable TLS/HTTPS
+    cert_file: ""             # Path to TLS certificate file
+    key_file: ""              # Path to TLS private key file
+
+# Storage Configuration
+storage:
+  engine: "file"            # Storage engine type (file, memory)
+  page_size: 4096             # Storage page size (bytes)
+  cache_size: 1000            # Number of pages to cache
+  sync_writes: true          # Sync writes to disk immediately
+  compression: false         # Enable storage compression (future)
+  wal:
+    enabled: true           # Enable Write-Ahead Logging
+    sync_interval: 1s   # WAL sync interval
+    max_size: 104857600        # Maximum WAL file size (bytes)
+    checkpoint_age: 5m0s # WAL checkpoint age
+
+# Search Configuration
+search:
+  parallel:
+    enabled: true        # Enable parallel search processing
+    max_workers: 10        # Maximum parallel workers
+    batch_size: 100         # Batch size for parallel processing
+    use_cache: true          # Use search result caching
+    preload_vectors: false # Preload vectors into memory
+  cache:
+    enabled: true           # Enable search result caching
+    max_entries: 1000        # Maximum cache entries
+    ttl: 5m0s           # Cache entry time-to-live
+    cleanup_interval: 1m0s # Cache cleanup interval
+  index:
+    default_type: "flat"   # Default index type (flat, hnsw, ivf)
+    default_metric: "cosine" # Default distance metric (cosine, euclidean)
+  default_limit: 10          # Default search result limit
+  max_limit: 1000             # Maximum search result limit
+
+# Embeddings Configuration
+embeddings:
+  default:
+    type: "sentence_transformers"  # Default vectorizer type
+    model: "all-MiniLM-L6-v2"    # Default model name
+    dimensions: 384           # Vector dimensions
+  batch:
+    enabled: true           # Enable batch processing
+    default_batch_size: 32  # Default batch size
+    max_batch_size: 128      # Maximum batch size
+    max_retries: 3         # Maximum retry attempts
+    timeout: 30s        # Batch processing timeout
+  processing:
+    chunk_size: 1024          # Text chunk size
+    chunk_overlap: 128       # Text chunk overlap
+    strategy: "smart"        # Chunking strategy (smart, sentence, paragraph)
+
+# Performance Configuration
+performance:
+  max_concurrency: 20      # Maximum concurrent operations
+  enable_simd: true          # Enable SIMD optimizations
+  memory_limit: 0         # Memory limit (0 = unlimited)
+  gc_target: 100            # Garbage collection target percentage
+  io:
+    use_memory_map: true    # Use memory-mapped I/O
+    async_io: true          # Enable async I/O operations
+    vectorized_ops: true    # Enable vectorized operations
+  cpu:
+    enable_simd: true       # Enable CPU SIMD instructions
+    vectorized_math: true  # Enable vectorized math operations
+    num_threads: 10        # Number of CPU threads to use
+
+# Logging Configuration
+logging:
+  level: "info"              # Log level (debug, info, warn, error)
+  format: "text"            # Log format (text, json)
+  output: "stdout"           # Log output (stdout, stderr, file)
+  file: ""                  # Log file path (when output=file)
+  max_size: 100              # Max log file size (MB)
+  max_backups: 3           # Max log file backups
+  max_age: 168h0m0s        # Max log file age
+  compress: true            # Compress old log files
+
+# General Configuration
+data_dir: "data"              # Data directory path
+version: "1.0"               # Configuration version

@@ -127,7 +127,11 @@ cp env.example .env
 # 1. Start VittoriaDB
 vittoriadb run
 
-# 2. Create a collection with content storage (NEW!)
+# 2. Check configuration and health
+curl http://localhost:8080/config    # View current configuration
+curl http://localhost:8080/health    # Check server health
+
+# 3. Create a collection with content storage (NEW!)
 curl -X POST http://localhost:8080/collections \
   -H "Content-Type: application/json" \
   -d '{
@@ -136,7 +140,7 @@ curl -X POST http://localhost:8080/collections \
     "content_storage": {"enabled": true}
   }'
 
-# 3. Insert text with automatic content preservation
+# 4. Insert text with automatic content preservation
 curl -X POST http://localhost:8080/collections/rag_docs/text \
   -H "Content-Type: application/json" \
   -d '{
@@ -145,7 +149,7 @@ curl -X POST http://localhost:8080/collections/rag_docs/text \
     "metadata": {"title": "About VittoriaDB"}
   }'
 
-# 4. Search with content retrieval
+# 5. Search with content retrieval
 curl "http://localhost:8080/collections/rag_docs/search/text?query=vector%20database&include_content=true"
 ```
 
@@ -438,6 +442,11 @@ def search_knowledge(query):
 VittoriaDB provides a comprehensive REST API for all vector database operations:
 
 ```bash
+# System endpoints
+curl http://localhost:8080/health        # Health check
+curl http://localhost:8080/stats         # Database statistics  
+curl http://localhost:8080/config        # Current configuration (NEW!)
+
 # Create collection
 curl -X POST http://localhost:8080/collections \
   -H "Content-Type: application/json" \
@@ -452,6 +461,47 @@ curl -X POST http://localhost:8080/collections/docs/vectors \
 curl -G http://localhost:8080/collections/docs/search \
   --data-urlencode 'vector=[0.1,0.2,0.3,0.4]' \
   --data-urlencode 'limit=10'
+```
+
+### **🔧 Configuration Endpoint (NEW!)**
+
+The `/config` endpoint provides comprehensive information about the current VittoriaDB configuration:
+
+```bash
+# Get current configuration
+curl http://localhost:8080/config
+
+# Response includes:
+# - Complete unified configuration
+# - Feature flags (SIMD, parallel search, caching, etc.)
+# - Performance settings and limits
+# - Metadata (source, load time, version)
+```
+
+**Example response structure:**
+```json
+{
+  "config": { /* Complete VittoriaConfig */ },
+  "features": {
+    "parallel_search": true,
+    "search_cache": true,
+    "memory_mapped_io": true,
+    "simd_optimizations": true,
+    "async_io": true
+  },
+  "performance": {
+    "max_workers": 10,
+    "cache_entries": 1000,
+    "cache_ttl": "5m0s",
+    "max_concurrency": 20,
+    "memory_limit_mb": 0
+  },
+  "metadata": {
+    "source": "default",
+    "loaded_at": "2025-09-25T13:46:49+02:00",
+    "version": "v1"
+  }
+}
 ```
 
 > 📖 **See [API Reference](docs/api.md) for complete endpoint documentation, examples, and response formats.**
@@ -478,27 +528,49 @@ curl -G http://localhost:8080/collections/docs/search \
 
 ## 🔧 Configuration
 
-### Basic Configuration
-```bash
-# Start with custom settings
-vittoriadb run \
-  --host 0.0.0.0 \
-  --port 8080 \
-  --data-dir ./data \
-  --cors
+VittoriaDB features a **unified configuration system** that's **fully backward compatible** with existing setups while providing advanced configuration management for production deployments.
 
-# Use configuration file
+### **✅ Zero Configuration (Works Out of the Box)**
+```bash
+# Just works - no configuration needed!
+vittoriadb run
+```
+
+### **🔧 Basic Configuration**
+```bash
+# CLI flags (backward compatible)
+vittoriadb run --host 0.0.0.0 --port 8080 --data-dir ./data
+
+# Environment variables
+export VITTORIADB_HOST=0.0.0.0
+export VITTORIADB_PORT=8080
+vittoriadb run
+
+# YAML configuration file
+vittoriadb config generate --output vittoriadb.yaml
 vittoriadb run --config vittoriadb.yaml
 ```
 
-### Data Directory
-VittoriaDB stores all data in a configurable directory (default: `./data`):
+### **⚡ Advanced Features**
 ```bash
-vittoriadb run --data-dir /path/to/your/data
-export VITTORIADB_DATA_DIR=/path/to/your/data
+# Performance optimization via environment variables
+export VITTORIA_PERF_ENABLE_SIMD=true
+export VITTORIA_SEARCH_PARALLEL_MAX_WORKERS=16
+export VITTORIA_PERF_IO_USE_MEMORY_MAP=true
+
+# Configuration management commands
+vittoriadb config show                    # View current config
+vittoriadb config env --list              # List all variables
+curl http://localhost:8080/config         # HTTP API endpoint
 ```
 
-> 📖 **See [Configuration Guide](docs/configuration.md) for complete options, YAML configuration, and data directory management.**
+### **🔄 Configuration Precedence**
+1. **CLI flags** (`--host`, `--port`, etc.) - Highest priority
+2. **Environment variables** (`VITTORIA_*` or `VITTORIADB_*`)
+3. **YAML configuration file** (`--config vittoriadb.yaml`)
+4. **Sensible defaults** - Works without any configuration
+
+> 📖 **See [Configuration Guide](docs/configuration.md) for comprehensive documentation including all parameters, environment variables, YAML examples, and production deployment configurations.**
 
 ## 🖥️ CLI Commands
 
@@ -515,13 +587,38 @@ vittoriadb info [--data-dir <path>]
 vittoriadb stats [--data-dir <path>]
 ```
 
+### **🔧 Configuration Commands (NEW!)**
+```bash
+# Generate sample configuration file
+vittoriadb config generate --output vittoriadb.yaml
+
+# Validate configuration file
+vittoriadb config validate --file vittoriadb.yaml
+
+# Show current configuration
+vittoriadb config show --format table
+
+# List all environment variables
+vittoriadb config env --list
+
+# Check current environment
+vittoriadb config env --check
+```
+
 ### Server Options
 ```bash
+# Traditional CLI flags (backward compatible)
 vittoriadb run \
   --host 0.0.0.0 \
   --port 8080 \
   --data-dir ./data \
-  --config config.yaml
+  --cors
+
+# New unified configuration
+vittoriadb run --config vittoriadb.yaml
+
+# Mixed approach (CLI flags override config file)
+vittoriadb run --config vittoriadb.yaml --port 9090
 ```
 
 > 📖 **See [CLI Reference](docs/cli.md) for complete command documentation, options, and environment variables.**

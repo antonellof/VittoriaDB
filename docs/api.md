@@ -18,6 +18,7 @@ Currently, VittoriaDB runs without authentication. Authentication features are p
 |--------|----------|-------------|
 | `GET` | `/health` | Health check |
 | `GET` | `/stats` | Database statistics |
+| `GET` | `/config` | **NEW!** Current configuration |
 | `GET` | `/collections` | List collections |
 | `POST` | `/collections` | Create collection |
 | `GET` | `/collections/{name}` | Get collection info |
@@ -75,6 +76,130 @@ curl http://localhost:8080/stats
   "queries_total": 42,
   "avg_query_latency": 1.5
 }
+```
+
+### Configuration Inspection (NEW!)
+```bash
+curl http://localhost:8080/config
+```
+
+**Response:**
+```json
+{
+  "config": {
+    "server": {
+      "host": "localhost",
+      "port": 8080,
+      "read_timeout": 30000000000,
+      "write_timeout": 30000000000,
+      "max_body_size": 33554432,
+      "cors": true,
+      "tls": {
+        "enabled": false,
+        "cert_file": "",
+        "key_file": ""
+      }
+    },
+    "storage": {
+      "engine": "file",
+      "page_size": 4096,
+      "cache_size": 1000,
+      "sync_writes": true
+    },
+    "search": {
+      "parallel": {
+        "enabled": true,
+        "max_workers": 10,
+        "batch_size": 100,
+        "preload_vectors": false
+      },
+      "cache": {
+        "enabled": true,
+        "max_entries": 1000,
+        "ttl": 300000000000,
+        "cleanup_interval": 60000000000
+      },
+      "index": {
+        "default_type": "flat",
+        "default_metric": "cosine",
+        "hnsw": {
+          "m": 16,
+          "ef_construction": 100,
+          "ef_search": 100
+        }
+      }
+    },
+    "embeddings": {
+      "default": {
+        "type": "sentence_transformers",
+        "model": "all-MiniLM-L6-v2",
+        "dimensions": 384
+      },
+      "batch": {
+        "enabled": true,
+        "batch_size": 32,
+        "timeout": 30000000000
+      }
+    },
+    "performance": {
+      "max_concurrency": 20,
+      "enable_simd": true,
+      "memory_limit": 2147483648,
+      "io": {
+        "use_memory_map": true,
+        "async_io": true,
+        "vectorized_ops": true
+      }
+    },
+    "log": {
+      "level": "info",
+      "format": "text",
+      "output": "stdout"
+    },
+    "data_dir": "data"
+  },
+  "features": {
+    "parallel_search": true,
+    "search_cache": true,
+    "memory_mapped_io": true,
+    "simd_optimizations": true,
+    "async_io": true
+  },
+  "performance": {
+    "max_workers": 10,
+    "cache_entries": 1000,
+    "cache_ttl": "5m0s",
+    "max_concurrency": 20,
+    "memory_limit_mb": 2048
+  },
+  "metadata": {
+    "source": "default",
+    "loaded_at": "2025-09-25T13:51:07+02:00",
+    "version": "v1",
+    "description": "VittoriaDB unified configuration"
+  }
+}
+```
+
+**Use Cases:**
+- **Debugging**: Inspect current configuration settings
+- **Monitoring**: Check feature flags and performance settings
+- **Validation**: Verify configuration is loaded correctly
+- **Documentation**: Self-documenting API with current settings
+
+**Query Examples:**
+```bash
+# Get specific configuration section
+curl -s http://localhost:8080/config | jq '.config.performance'
+
+# Check if parallel search is enabled
+curl -s http://localhost:8080/config | jq '.features.parallel_search'
+
+# Get performance metrics
+curl -s http://localhost:8080/config | jq '.performance'
+
+# Check configuration source and load time
+curl -s http://localhost:8080/config | jq '.metadata'
 ```
 
 ## 📚 Collection Management

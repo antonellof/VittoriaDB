@@ -60,13 +60,14 @@ cp env.example .env
 ```
 
 **What's included:**
-- ✅ **VittoriaDB**: Vector database with HNSW indexing (built locally)
+- ✅ **VittoriaDB**: Vector database with HNSW indexing and I/O optimization (built locally)
 - ✅ **Backend**: FastAPI with RAG, web research, and file processing
 - ✅ **Frontend**: React UI with real-time chat interface
 - ✅ **Ollama**: Local LLM inference (optional, for offline usage)
 - ✅ **Chromium**: Web scraping with Playwright/Crawl4AI (fully configured)
 - ✅ **Docker Compose**: Complete orchestration with health checks
 - ✅ **No Redis**: Simplified architecture using FastAPI BackgroundTasks
+- ✅ **Unified Configuration**: Advanced configuration management with environment variables
 
 ### 📋 Environment Configuration
 

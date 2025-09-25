@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/antonellof/VittoriaDB/pkg/config"
 	"github.com/antonellof/VittoriaDB/pkg/core"
 	"github.com/antonellof/VittoriaDB/pkg/server"
 	"github.com/urfave/cli/v2"
@@ -38,6 +39,80 @@ func main() {
 					fmt.Printf("Git Commit: %s\n", GitCommit)
 					fmt.Printf("Git Tag: %s\n", GitTag)
 					return nil
+				},
+			},
+			{
+				Name:  "config",
+				Usage: "Configuration management commands",
+				Subcommands: []*cli.Command{
+					{
+						Name:  "generate",
+						Usage: "Generate a sample configuration file",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:    "output",
+								Aliases: []string{"o"},
+								Value:   "vittoriadb.yaml",
+								Usage:   "Output configuration file path",
+							},
+							&cli.BoolFlag{
+								Name:  "comments",
+								Value: true,
+								Usage: "Include comments in generated config",
+							},
+						},
+						Action: generateConfig,
+					},
+					{
+						Name:  "validate",
+						Usage: "Validate a configuration file",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:     "file",
+								Aliases:  []string{"f"},
+								Usage:    "Configuration file to validate",
+								Required: true,
+							},
+						},
+						Action: validateConfig,
+					},
+					{
+						Name:  "show",
+						Usage: "Show current configuration",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:    "file",
+								Aliases: []string{"f"},
+								Usage:   "Configuration file to show (default: show defaults)",
+							},
+							&cli.StringFlag{
+								Name:  "format",
+								Value: "yaml",
+								Usage: "Output format (yaml, table)",
+							},
+						},
+						Action: showConfig,
+					},
+					{
+						Name:  "env",
+						Usage: "Show environment variable configuration",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:  "prefix",
+								Value: "VITTORIA_",
+								Usage: "Environment variable prefix",
+							},
+							&cli.BoolFlag{
+								Name:  "list",
+								Usage: "List all supported environment variables",
+							},
+							&cli.BoolFlag{
+								Name:  "check",
+								Usage: "Check current environment configuration",
+							},
+						},
+						Action: envConfig,
+					},
 				},
 			},
 			{
@@ -160,56 +235,64 @@ func main() {
 }
 
 func runServer(c *cli.Context) error {
-	// Create database configuration
-	config := &core.Config{
-		DataDir: c.String("data-dir"),
-		Server: core.ServerConfig{
-			Host:         c.String("host"),
-			Port:         c.Int("port"),
-			ReadTimeout:  30 * time.Second,
-			WriteTimeout: 30 * time.Second,
-			MaxBodySize:  10 << 20, // 10MB
-			CORS:         c.Bool("cors"),
-		},
-		Storage: core.StorageConfig{
-			PageSize:    4096,
-			CacheSize:   100,
-			SyncWrites:  true,
-			Compression: false,
-		},
-		Index: core.IndexConfig{
-			DefaultType:   core.IndexTypeFlat,
-			DefaultMetric: core.DistanceMetricCosine,
-		},
-		Performance: core.PerfConfig{
-			MaxConcurrency: 100,
-			EnableSIMD:     true,
-			MemoryLimit:    1 << 30, // 1GB
-			GCTarget:       100,
-		},
+	// Load unified configuration
+	var unifiedConfig *config.VittoriaConfig
+	var err error
+
+	configFile := c.String("config")
+	if configFile != "" {
+		// Load from specified config file
+		unifiedConfig, err = config.LoadConfigFromFile(configFile)
+		if err != nil {
+			return fmt.Errorf("failed to load config file: %w", err)
+		}
+	} else {
+		// Load from defaults and environment variables
+		flags := make(map[string]string)
+		if c.IsSet("host") {
+			flags["host"] = c.String("host")
+		}
+		if c.IsSet("port") {
+			flags["port"] = fmt.Sprintf("%d", c.Int("port"))
+		}
+		if c.IsSet("data-dir") {
+			flags["data-dir"] = c.String("data-dir")
+		}
+
+		unifiedConfig, err = config.LoadConfigWithOverrides("", "VITTORIA_", flags)
+		if err != nil {
+			return fmt.Errorf("failed to load configuration: %w", err)
+		}
 	}
+
+	// Create migration adapter to convert to legacy format
+	migrator := config.NewConfigMigrator()
+	legacyBundle := migrator.MigrateFromUnified(unifiedConfig)
+
+	// Use the legacy core config for now (until we fully migrate the core package)
+	coreConfig := legacyBundle.Core
 
 	// Create and open database
 	db := core.NewDatabase()
 	ctx := context.Background()
 
-	if err := db.Open(ctx, config); err != nil {
+	if err := db.Open(ctx, coreConfig); err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 	defer db.Close()
 
 	// Create server configuration
 	serverConfig := &server.ServerConfig{
-		Host:         config.Server.Host,
-		Port:         config.Server.Port,
-		ReadTimeout:  config.Server.ReadTimeout,
-		WriteTimeout: config.Server.WriteTimeout,
-		MaxBodySize:  config.Server.MaxBodySize,
-		CORS:         config.Server.CORS,
+		Host:         coreConfig.Server.Host,
+		Port:         coreConfig.Server.Port,
+		ReadTimeout:  coreConfig.Server.ReadTimeout,
+		WriteTimeout: coreConfig.Server.WriteTimeout,
+		MaxBodySize:  coreConfig.Server.MaxBodySize,
+		CORS:         coreConfig.Server.CORS,
 	}
 
 	// Create and start server
-	srv := server.NewServer(db, serverConfig)
+	srv := server.NewServer(db, serverConfig, unifiedConfig)
 
 	// Handle graceful shutdown
 	go func() {
@@ -237,24 +320,27 @@ func runServer(c *cli.Context) error {
 	}()
 
 	// Get absolute path for data directory
-	absDataDir, err := filepath.Abs(config.DataDir)
+	absDataDir, err := filepath.Abs(coreConfig.DataDir)
 	if err != nil {
-		absDataDir = config.DataDir
+		absDataDir = coreConfig.DataDir
 	}
 
 	// Enhanced startup information
 	log.Printf("🚀 VittoriaDB %s starting...", Version)
 	log.Printf("📁 Data directory: %s", absDataDir)
-	log.Printf("🌐 HTTP server: http://%s:%d", config.Server.Host, config.Server.Port)
-	log.Printf("📊 Web dashboard: http://%s:%d/", config.Server.Host, config.Server.Port)
+	log.Printf("🌐 HTTP server: http://%s:%d", coreConfig.Server.Host, coreConfig.Server.Port)
+	log.Printf("📊 Web dashboard: http://%s:%d/", coreConfig.Server.Host, coreConfig.Server.Port)
 	log.Printf("⚙️  Configuration:")
-	log.Printf("   • Index type: %s", config.Index.DefaultType)
-	log.Printf("   • Distance metric: %s", config.Index.DefaultMetric)
-	log.Printf("   • Page size: %d bytes", config.Storage.PageSize)
-	log.Printf("   • Cache size: %d pages", config.Storage.CacheSize)
-	log.Printf("   • CORS enabled: %t", config.Server.CORS)
-	log.Printf("   • Max concurrency: %d", config.Performance.MaxConcurrency)
-	log.Printf("   • Memory limit: %d MB", config.Performance.MemoryLimit/(1024*1024))
+	log.Printf("   • Config source: %s", unifiedConfig.Source)
+	log.Printf("   • Index type: %s", coreConfig.Index.DefaultType)
+	log.Printf("   • Distance metric: %s", coreConfig.Index.DefaultMetric)
+	log.Printf("   • Page size: %d bytes", coreConfig.Storage.PageSize)
+	log.Printf("   • Cache size: %d pages", coreConfig.Storage.CacheSize)
+	log.Printf("   • CORS enabled: %t", coreConfig.Server.CORS)
+	log.Printf("   • Parallel search: %t (workers: %d)", unifiedConfig.Search.Parallel.Enabled, unifiedConfig.Search.Parallel.MaxWorkers)
+	log.Printf("   • Search cache: %t (entries: %d)", unifiedConfig.Search.Cache.Enabled, unifiedConfig.Search.Cache.MaxEntries)
+	log.Printf("   • Memory-mapped I/O: %t", unifiedConfig.Performance.IO.UseMemoryMap)
+	log.Printf("   • SIMD optimizations: %t", unifiedConfig.Performance.EnableSIMD)
 
 	// Start server (blocking)
 	if err := srv.Start(); err != nil {
@@ -463,4 +549,42 @@ func formatFileSize(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// Configuration management CLI handlers
+
+func generateConfig(c *cli.Context) error {
+	cli := config.NewCLIManager()
+	return cli.GenerateConfig(c.String("output"), c.Bool("comments"))
+}
+
+func validateConfig(c *cli.Context) error {
+	cli := config.NewCLIManager()
+	return cli.ValidateConfig(c.String("file"))
+}
+
+func showConfig(c *cli.Context) error {
+	cli := config.NewCLIManager()
+	return cli.ShowConfig(c.String("file"), c.String("format"))
+}
+
+func envConfig(c *cli.Context) error {
+	cli := config.NewCLIManager()
+	prefix := c.String("prefix")
+
+	if c.Bool("list") {
+		cli.ListEnvVars(prefix)
+		return nil
+	}
+
+	if c.Bool("check") {
+		cli.CheckEnvironment(prefix)
+		return nil
+	}
+
+	// Default: show both list and check
+	cli.ListEnvVars(prefix)
+	fmt.Println()
+	cli.CheckEnvironment(prefix)
+	return nil
 }

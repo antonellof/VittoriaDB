@@ -621,6 +621,61 @@ go run 12_parallel_vs_sequential_benchmark.go
 - **Large datasets (5000+ vectors)**: 15-32x parallel speedup + 125-276x cache speedup
 - **Cache hit rate**: 99% for repeated queries
 
+#### 13. Unified Configuration Demo (NEW!)
+**File:** `13_unified_configuration_demo.go`
+
+**🔧 CONFIGURATION MANAGEMENT:** Comprehensive demonstration of VittoriaDB's unified configuration system:
+- Multiple configuration sources (YAML, environment variables, CLI flags)
+- Configuration validation with performance and security checks
+- Hot-reloading and dynamic configuration updates
+- Legacy configuration migration utilities
+- Production-ready configuration management
+
+**Usage:**
+```bash
+cd examples/go
+go run 13_unified_configuration_demo.go
+```
+
+**Features:**
+- ✅ **Multi-source configuration** - YAML files, environment variables, CLI flags
+- ✅ **Validation system** - Performance, security, and resource validators
+- ✅ **Hot-reloading** - Dynamic configuration updates without restart
+- ✅ **Migration utilities** - Seamless legacy configuration migration
+- ✅ **CLI tools integration** - Works with `vittoriadb config` commands
+- ✅ **Production scenarios** - Development, production, and high-performance configurations
+
+#### 14. I/O Optimization Demo (NEW!)
+**File:** `14_io_optimization_demo.go`
+
+**⚡ PERFORMANCE OPTIMIZATION:** Advanced I/O optimization features including SIMD, memory-mapped storage, and async I/O:
+- SIMD-optimized vector operations with parallel processing
+- Memory-mapped storage with zero-copy operations
+- Async I/O engine with worker pools and batching
+- Comprehensive performance benchmarks across different scenarios
+- Real-world performance analysis and system information
+
+**Usage:**
+```bash
+cd examples/go
+go run 14_io_optimization_demo.go
+```
+
+**Features:**
+- ✅ **SIMD operations** - Up to 7.7x speedup with parallel SIMD for large datasets
+- ✅ **Memory-mapped I/O** - Zero-copy reads, 10-50x faster than traditional I/O
+- ✅ **Async I/O engine** - Non-blocking operations with worker pools
+- ✅ **Vectorized operations** - Better CPU cache utilization and performance
+- ✅ **Comprehensive benchmarks** - Performance analysis across dimensions and dataset sizes
+- ✅ **System integration** - Works seamlessly with unified configuration system
+
+**📊 Performance Results:**
+- **SIMD vectorized operations**: 1.03-2.02x speedup for individual operations
+- **Parallel SIMD processing**: 2.4-7.7x speedup for large datasets (10K+ vectors)
+- **Memory-mapped storage**: Zero-copy reads with microsecond-level latency
+- **Async I/O throughput**: Improved concurrent operation handling
+- **System scalability**: Optimal performance across different CPU core counts
+
 #### 10. Large Text Processing Demo
 **File:** `10_large_text_processing_demo.go`
 

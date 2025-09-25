@@ -65,6 +65,39 @@ vittoriadb backup --output <file>
 vittoriadb restore --input <file>
 ```
 
+### Configuration Management (NEW!)
+```bash
+# Generate sample configuration file
+vittoriadb config generate --output vittoriadb.yaml
+
+# Validate configuration file
+vittoriadb config validate --file vittoriadb.yaml
+
+# Show current configuration
+vittoriadb config show [--format table|json|yaml]
+
+# Environment variable management
+vittoriadb config env --list              # List all available variables
+vittoriadb config env --check             # Check current environment
+vittoriadb config env --show-values       # Show variables with values
+
+# Example output:
+# 🔧 VittoriaDB Configuration
+# ========================
+# Source: default
+# 
+# Server Configuration:
+#   Host: localhost
+#   Port: 8080
+#   CORS: enabled
+# 
+# Performance Features:
+#   Parallel Search: ✅ enabled (10 workers)
+#   Search Cache: ✅ enabled (1000 entries)
+#   SIMD Optimizations: ✅ enabled
+#   Memory-mapped I/O: ✅ enabled
+```
+
 ## ⚙️ Server Command Options
 
 ### Basic Options
@@ -88,8 +121,9 @@ vittoriadb run \
 
 ## 🌍 Environment Variables
 
-VittoriaDB supports configuration via environment variables:
+VittoriaDB supports configuration via environment variables with both legacy and unified formats:
 
+### Legacy Variables (Backward Compatible)
 ```bash
 # Data directory
 export VITTORIADB_DATA_DIR=/path/to/data
@@ -105,6 +139,48 @@ export VITTORIADB_CONFIG=/path/to/config.yaml
 
 # Log level
 export VITTORIADB_LOG_LEVEL=debug
+```
+
+### Unified Variables (Advanced Features)
+```bash
+# Server Configuration
+export VITTORIA_HOST=localhost
+export VITTORIA_PORT=8080
+export VITTORIA_SERVER_CORS=true
+
+# Performance Settings
+export VITTORIA_PERF_ENABLE_SIMD=true
+export VITTORIA_PERF_IO_USE_MEMORY_MAP=true
+export VITTORIA_PERF_MAX_CONCURRENCY=20
+
+# Search Configuration
+export VITTORIA_SEARCH_PARALLEL_ENABLED=true
+export VITTORIA_SEARCH_PARALLEL_MAX_WORKERS=16
+export VITTORIA_SEARCH_CACHE_ENABLED=true
+export VITTORIA_SEARCH_CACHE_MAX_ENTRIES=5000
+
+# Storage Configuration
+export VITTORIA_STORAGE_PAGE_SIZE=4096
+export VITTORIA_STORAGE_CACHE_SIZE=1000
+
+# Logging Configuration
+export VITTORIA_LOG_LEVEL=info
+export VITTORIA_LOG_FORMAT=text
+
+# Start server with environment configuration
+vittoriadb run
+```
+
+### Environment Variable Discovery
+```bash
+# List all available environment variables
+vittoriadb config env --list
+
+# Check current environment configuration
+vittoriadb config env --check
+
+# Show environment variables with current values
+vittoriadb config env --show-values
 ```
 
 ## 📁 Data Directory Management

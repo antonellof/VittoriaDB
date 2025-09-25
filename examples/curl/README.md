@@ -48,6 +48,30 @@ Make sure VittoriaDB is running:
 - ✅ Performance comparison (individual vs batch)
 - ✅ Proper cleanup and error handling
 
+### 4. Configuration Endpoint Demo (`config_endpoint_demo.sh`) **NEW!**
+**Purpose:** Demonstrate the new GET /config endpoint for configuration inspection
+
+**Features:**
+- ✅ Configuration retrieval via HTTP API
+- ✅ Feature flags inspection (SIMD, parallel search, caching)
+- ✅ Performance settings overview
+- ✅ Configuration metadata and source tracking
+- ✅ JSON formatting with jq integration
+- ✅ Practical usage examples and tips
+
+**Usage:**
+```bash
+cd examples/curl
+chmod +x config_endpoint_demo.sh
+./config_endpoint_demo.sh
+```
+
+**Key Endpoints Demonstrated:**
+- `GET /config` - Complete configuration with metadata and feature flags
+- Configuration inspection for debugging and monitoring
+- Performance settings validation
+
+### 2. Basic Usage (continued)
 **Usage:**
 ```bash
 cd examples/curl

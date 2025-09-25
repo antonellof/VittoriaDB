@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/antonellof/VittoriaDB/pkg/config"
 	"github.com/antonellof/VittoriaDB/pkg/core"
 	"github.com/antonellof/VittoriaDB/pkg/processor"
 	"github.com/gorilla/mux"
@@ -17,11 +18,12 @@ import (
 
 // Server represents the HTTP API server
 type Server struct {
-	db        core.Database
-	router    *mux.Router
-	server    *http.Server
-	config    *ServerConfig
-	processor *processor.ProcessorFactory
+	db            core.Database
+	router        *mux.Router
+	server        *http.Server
+	config        *ServerConfig
+	unifiedConfig *config.VittoriaConfig
+	processor     *processor.ProcessorFactory
 }
 
 // ServerConfig represents server configuration
@@ -35,12 +37,13 @@ type ServerConfig struct {
 }
 
 // NewServer creates a new HTTP server
-func NewServer(db core.Database, config *ServerConfig) *Server {
+func NewServer(db core.Database, config *ServerConfig, unifiedConfig *config.VittoriaConfig) *Server {
 	s := &Server{
-		db:        db,
-		router:    mux.NewRouter(),
-		config:    config,
-		processor: processor.NewProcessorFactory(),
+		db:            db,
+		router:        mux.NewRouter(),
+		config:        config,
+		unifiedConfig: unifiedConfig,
+		processor:     processor.NewProcessorFactory(),
 	}
 
 	s.setupRoutes()
@@ -73,6 +76,7 @@ func (s *Server) setupRoutes() {
 	// Health and stats
 	s.router.HandleFunc("/health", s.handleHealth).Methods("GET")
 	s.router.HandleFunc("/stats", s.handleStats).Methods("GET")
+	s.router.HandleFunc("/config", s.handleConfig).Methods("GET")
 
 	// Collection management
 	s.router.HandleFunc("/collections", s.handleCollections).Methods("GET", "POST")
@@ -128,6 +132,41 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, stats)
+}
+
+// Configuration endpoint
+func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	if s.unifiedConfig == nil {
+		s.writeError(w, http.StatusInternalServerError, "Configuration not available", nil)
+		return
+	}
+
+	// Create a response with configuration and metadata
+	response := map[string]interface{}{
+		"config": s.unifiedConfig,
+		"metadata": map[string]interface{}{
+			"source":      s.unifiedConfig.Source,
+			"loaded_at":   time.Now().Format(time.RFC3339),
+			"version":     "v1",
+			"description": "VittoriaDB unified configuration",
+		},
+		"features": map[string]interface{}{
+			"parallel_search":    s.unifiedConfig.Search.Parallel.Enabled,
+			"search_cache":       s.unifiedConfig.Search.Cache.Enabled,
+			"memory_mapped_io":   s.unifiedConfig.Performance.IO.UseMemoryMap,
+			"simd_optimizations": s.unifiedConfig.Performance.EnableSIMD,
+			"async_io":           s.unifiedConfig.Performance.IO.AsyncIO,
+		},
+		"performance": map[string]interface{}{
+			"max_workers":      s.unifiedConfig.Search.Parallel.MaxWorkers,
+			"cache_entries":    s.unifiedConfig.Search.Cache.MaxEntries,
+			"cache_ttl":        s.unifiedConfig.Search.Cache.TTL.String(),
+			"max_concurrency":  s.unifiedConfig.Performance.MaxConcurrency,
+			"memory_limit_mb":  s.unifiedConfig.Performance.MemoryLimit / (1024 * 1024),
+		},
+	}
+
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 // Collections endpoint (GET: list, POST: create)
@@ -574,6 +613,7 @@ curl "http://localhost:8080/collections/docs/search?vector=0.1,0.2,0.3,0.4&limit
         <h2>API Endpoints</h2>
         <div class="endpoint"><code>GET /health</code> - Health check</div>
         <div class="endpoint"><code>GET /stats</code> - Database statistics</div>
+        <div class="endpoint"><code>GET /config</code> - Current configuration</div>
         <div class="endpoint"><code>GET /collections</code> - List collections</div>
         <div class="endpoint"><code>POST /collections</code> - Create collection</div>
         <div class="endpoint"><code>GET /collections/{name}</code> - Get collection info</div>
