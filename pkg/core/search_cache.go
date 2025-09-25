@@ -10,9 +10,9 @@ import (
 
 // SearchCacheConfig holds configuration for search caching
 type SearchCacheConfig struct {
-	Enabled        bool          `json:"enabled" yaml:"enabled"`
-	MaxEntries     int           `json:"max_entries" yaml:"max_entries"`
-	TTL            time.Duration `json:"ttl" yaml:"ttl"`
+	Enabled         bool          `json:"enabled" yaml:"enabled"`
+	MaxEntries      int           `json:"max_entries" yaml:"max_entries"`
+	TTL             time.Duration `json:"ttl" yaml:"ttl"`
 	CleanupInterval time.Duration `json:"cleanup_interval" yaml:"cleanup_interval"`
 }
 
@@ -28,11 +28,11 @@ func DefaultSearchCacheConfig() *SearchCacheConfig {
 
 // CacheEntry represents a cached search result
 type CacheEntry struct {
-	Key        string          `json:"key"`
-	Response   *SearchResponse `json:"response"`
-	CreatedAt  time.Time       `json:"created_at"`
-	AccessedAt time.Time       `json:"accessed_at"`
-	AccessCount int64          `json:"access_count"`
+	Key         string          `json:"key"`
+	Response    *SearchResponse `json:"response"`
+	CreatedAt   time.Time       `json:"created_at"`
+	AccessedAt  time.Time       `json:"accessed_at"`
+	AccessCount int64           `json:"access_count"`
 }
 
 // SearchCache provides caching for search results
@@ -82,7 +82,7 @@ func (sc *SearchCache) Get(req *SearchRequest) (*SearchResponse, bool) {
 	}
 
 	key := sc.generateKey(req)
-	
+
 	sc.mu.RLock()
 	entry, exists := sc.entries[key]
 	sc.mu.RUnlock()
@@ -155,7 +155,7 @@ func (sc *SearchCache) GetStats() SearchCacheStats {
 
 	stats := *sc.stats
 	stats.Entries = len(sc.entries)
-	
+
 	total := stats.Hits + stats.Misses
 	if total > 0 {
 		stats.HitRate = float64(stats.Hits) / float64(total)
@@ -175,13 +175,13 @@ func (sc *SearchCache) Close() {
 func (sc *SearchCache) generateKey(req *SearchRequest) string {
 	// Create a deterministic key from the request
 	keyData := struct {
-		Vector          []float32              `json:"vector"`
-		Limit           int                    `json:"limit"`
-		Offset          int                    `json:"offset"`
-		Filter          *Filter                `json:"filter"`
-		IncludeVector   bool                   `json:"include_vector"`
-		IncludeMetadata bool                   `json:"include_metadata"`
-		IncludeContent  bool                   `json:"include_content"`
+		Vector          []float32 `json:"vector"`
+		Limit           int       `json:"limit"`
+		Offset          int       `json:"offset"`
+		Filter          *Filter   `json:"filter"`
+		IncludeVector   bool      `json:"include_vector"`
+		IncludeMetadata bool      `json:"include_metadata"`
+		IncludeContent  bool      `json:"include_content"`
 	}{
 		Vector:          req.Vector,
 		Limit:           req.Limit,

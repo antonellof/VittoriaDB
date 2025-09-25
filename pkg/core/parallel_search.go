@@ -11,10 +11,10 @@ import (
 
 // ParallelSearchConfig holds configuration for parallel search
 type ParallelSearchConfig struct {
-	Enabled       bool `json:"enabled" yaml:"enabled"`
-	MaxWorkers    int  `json:"max_workers" yaml:"max_workers"`
-	BatchSize     int  `json:"batch_size" yaml:"batch_size"`
-	UseCache      bool `json:"use_cache" yaml:"use_cache"`
+	Enabled        bool `json:"enabled" yaml:"enabled"`
+	MaxWorkers     int  `json:"max_workers" yaml:"max_workers"`
+	BatchSize      int  `json:"batch_size" yaml:"batch_size"`
+	UseCache       bool `json:"use_cache" yaml:"use_cache"`
 	PreloadVectors bool `json:"preload_vectors" yaml:"preload_vectors"`
 }
 
@@ -40,13 +40,13 @@ type ParallelSearchEngine struct {
 
 // ParallelSearchStats tracks search performance
 type ParallelSearchStats struct {
-	TotalSearches     int64         `json:"total_searches"`
-	CacheHits         int64         `json:"cache_hits"`
-	CacheMisses       int64         `json:"cache_misses"`
-	AverageLatency    time.Duration `json:"average_latency"`
-	ParallelSearches  int64         `json:"parallel_searches"`
-	SequentialSearches int64        `json:"sequential_searches"`
-	WorkersUsed       int           `json:"workers_used"`
+	TotalSearches      int64         `json:"total_searches"`
+	CacheHits          int64         `json:"cache_hits"`
+	CacheMisses        int64         `json:"cache_misses"`
+	AverageLatency     time.Duration `json:"average_latency"`
+	ParallelSearches   int64         `json:"parallel_searches"`
+	SequentialSearches int64         `json:"sequential_searches"`
+	WorkersUsed        int           `json:"workers_used"`
 }
 
 // NewParallelSearchEngine creates a new parallel search engine
@@ -71,7 +71,7 @@ func NewParallelSearchEngine(collection *VittoriaCollection, config *ParallelSea
 // Search performs enhanced search with caching and parallel processing
 func (pse *ParallelSearchEngine) Search(ctx context.Context, req *SearchRequest) (*SearchResponse, error) {
 	startTime := time.Now()
-	
+
 	pse.mu.Lock()
 	pse.stats.TotalSearches++
 	pse.mu.Unlock()
@@ -202,7 +202,7 @@ func (pse *ParallelSearchEngine) parallelSearch(ctx context.Context, req *Search
 		wg.Add(1)
 		go func(batch []*Vector) {
 			defer wg.Done()
-			
+
 			select {
 			case <-ctx.Done():
 				return
@@ -306,10 +306,10 @@ func (pse *ParallelSearchEngine) processBatch(req *SearchRequest, vectors []*Vec
 func (pse *ParallelSearchEngine) shouldUseParallelSearch(req *SearchRequest) bool {
 	// Use parallel search for larger datasets or when specifically beneficial
 	vectorCount := len(pse.collection.vectors)
-	
+
 	// Use parallel search if we have enough vectors to benefit from parallelization
 	minVectorsForParallel := pse.config.MaxWorkers * pse.config.BatchSize
-	
+
 	return vectorCount >= minVectorsForParallel
 }
 
@@ -333,16 +333,16 @@ func (pse *ParallelSearchEngine) updateLatencyStats(latency time.Duration) {
 func (pse *ParallelSearchEngine) GetStats() ParallelSearchStats {
 	pse.mu.RLock()
 	defer pse.mu.RUnlock()
-	
+
 	stats := *pse.stats
-	
+
 	// Add cache stats if available
 	if pse.cache != nil {
 		cacheStats := pse.cache.GetStats()
 		stats.CacheHits = cacheStats.Hits
 		stats.CacheMisses = cacheStats.Misses
 	}
-	
+
 	return stats
 }
 
@@ -351,7 +351,7 @@ func (pse *ParallelSearchEngine) GetCacheStats() *SearchCacheStats {
 	if pse.cache == nil {
 		return nil
 	}
-	
+
 	stats := pse.cache.GetStats()
 	return &stats
 }
@@ -367,9 +367,9 @@ func (pse *ParallelSearchEngine) ClearCache() {
 func (pse *ParallelSearchEngine) UpdateConfig(config *ParallelSearchConfig) {
 	pse.mu.Lock()
 	defer pse.mu.Unlock()
-	
+
 	pse.config = config
-	
+
 	// Update cache if needed
 	if config.UseCache && pse.cache == nil {
 		pse.cache = NewSearchCache(DefaultSearchCacheConfig())

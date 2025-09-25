@@ -14,7 +14,7 @@ func TestSearchCache_BasicOperations(t *testing.T) {
 		TTL:             1 * time.Second,
 		CleanupInterval: 100 * time.Millisecond,
 	}
-	
+
 	cache := NewSearchCache(config)
 	defer cache.Close()
 
@@ -48,7 +48,7 @@ func TestSearchCache_BasicOperations(t *testing.T) {
 
 	// Test cache set and get
 	cache.Set(req, response)
-	
+
 	result, found = cache.Get(req)
 	if !found {
 		t.Error("Expected cache hit, got miss")
@@ -62,7 +62,7 @@ func TestSearchCache_BasicOperations(t *testing.T) {
 
 	// Test cache expiration
 	time.Sleep(1200 * time.Millisecond) // Wait for TTL + some buffer
-	
+
 	result, found = cache.Get(req)
 	if found {
 		t.Error("Expected cache miss after TTL expiration")
@@ -77,20 +77,20 @@ func TestSearchCache_Statistics(t *testing.T) {
 
 	req1 := &SearchRequest{Vector: []float32{1.0}, Limit: 5}
 	req2 := &SearchRequest{Vector: []float32{2.0}, Limit: 5}
-	
+
 	response := &SearchResponse{Results: []*SearchResult{{ID: "test", Score: 0.9}}}
 
 	// Generate some hits and misses
 	cache.Get(req1) // miss
 	cache.Get(req2) // miss
-	
+
 	cache.Set(req1, response)
 	cache.Get(req1) // hit
 	cache.Get(req1) // hit
 	cache.Get(req2) // miss
 
 	stats := cache.GetStats()
-	
+
 	if stats.Hits != 2 {
 		t.Errorf("Expected 2 hits, got %d", stats.Hits)
 	}
@@ -100,13 +100,13 @@ func TestSearchCache_Statistics(t *testing.T) {
 	if stats.Entries != 1 {
 		t.Errorf("Expected 1 entry, got %d", stats.Entries)
 	}
-	
+
 	expectedHitRate := float64(2) / float64(5) // 2 hits out of 5 total requests
 	if abs(stats.HitRate-expectedHitRate) > 0.01 {
 		t.Errorf("Expected hit rate %.2f, got %.2f", expectedHitRate, stats.HitRate)
 	}
 
-	t.Logf("Cache statistics: hits=%d, misses=%d, hit_rate=%.2f", 
+	t.Logf("Cache statistics: hits=%d, misses=%d, hit_rate=%.2f",
 		stats.Hits, stats.Misses, stats.HitRate)
 }
 
@@ -206,7 +206,7 @@ func TestParallelSearchEngine_Performance(t *testing.T) {
 		IncludeVector:   false,
 		IncludeMetadata: false,
 	}
-	
+
 	t.Logf("Searching for vector v0 with values: %v", vectors[0].Vector[:5]) // Log first 5 values
 
 	start := time.Now()
@@ -226,7 +226,7 @@ func TestParallelSearchEngine_Performance(t *testing.T) {
 	for i := 0; i < 3 && i < len(response.Results); i++ {
 		t.Logf("  %d: ID=%s, Score=%.6f", i, response.Results[i].ID, response.Results[i].Score)
 	}
-	
+
 	// First result should be exact match (v0) with highest score
 	found := false
 	for i, result := range response.Results {
@@ -247,7 +247,7 @@ func TestParallelSearchEngine_Performance(t *testing.T) {
 		}
 	}
 
-	t.Logf("Searched %d vectors in %v (reported: %d ms)", 
+	t.Logf("Searched %d vectors in %v (reported: %d ms)",
 		numVectors, elapsed, response.TookMS)
 
 	// Test cache performance
@@ -263,7 +263,7 @@ func TestParallelSearchEngine_Performance(t *testing.T) {
 	if cachedElapsed > elapsed/2 {
 		t.Logf("Cache may not be working optimally: original=%v, cached=%v", elapsed, cachedElapsed)
 	} else {
-		t.Logf("Cache performance: original=%v, cached=%v (%.1fx faster)", 
+		t.Logf("Cache performance: original=%v, cached=%v (%.1fx faster)",
 			elapsed, cachedElapsed, float64(elapsed)/float64(cachedElapsed))
 	}
 
