@@ -375,6 +375,58 @@ Both new tests confirm the issue identified in Go examples:
 - **Sentence-transformers**: Good semantic understanding and proper matching
 - **Recommendation**: Use sentence-transformers or OpenAI embeddings for production
 
+#### 15. Unified API Showcase (NEW!)
+**File:** `15_unified_api_showcase.py`
+
+**🚀 MODERN API:** Comprehensive demonstration of VittoriaDB's new unified, schema-based API:
+- Document-oriented database with flexible schemas
+- Full-text search with BM25 scoring and advanced features
+- Vector similarity search with multiple distance metrics
+- Hybrid search combining text and vector search
+- Advanced filtering, facets, sorting, and grouping
+- Modern API similar to leading vector databases
+
+**Usage:**
+```bash
+pip install vittoriadb numpy
+cd examples/python
+python 15_unified_api_showcase.py
+```
+
+**Features:**
+- ✅ **Schema-based documents** - Flexible, structured document storage
+- ✅ **Multiple search modes** - Full-text, vector, and hybrid search
+- ✅ **Advanced queries** - Filters, facets, boosting, sorting
+- ✅ **Modern API design** - Similar to leading vector databases
+- ✅ **Production-ready** - Error handling, performance optimization
+- ✅ **Comprehensive demo** - All major features in one example
+
+**🎯 API Highlights:**
+```python
+# Create database with schema
+db = create_unified({
+    "name": "string",
+    "description": "string", 
+    "price": "number",
+    "embedding": "vector[384]",
+    "meta": {"rating": "number"}
+})
+
+# Insert documents
+db.insert({
+    "name": "Noise cancelling headphones",
+    "description": "Best headphones on market",
+    "price": 99.99,
+    "embedding": [0.1, 0.2, 0.3, ...],
+    "meta": {"rating": 4.5}
+})
+
+# Search with different modes
+results = db.search(term="best headphones")  # Full-text
+results = db.search_vector([0.1, 0.2, ...], "embedding")  # Vector
+results = db.search_hybrid("quality", [0.1, 0.2, ...], "embedding")  # Hybrid
+```
+
 ## 🔧 Go Examples (`go/`)
 
 The Go examples demonstrate both **HTTP client usage** and **native SDK integration**. They are organized in a logical progression from basic HTTP operations to advanced native SDK features and performance testing.
@@ -675,6 +727,60 @@ go run 14_io_optimization_demo.go
 - **Memory-mapped storage**: Zero-copy reads with microsecond-level latency
 - **Async I/O throughput**: Improved concurrent operation handling
 - **System scalability**: Optimal performance across different CPU core counts
+
+#### 15. Unified API Demo (NEW!)
+**File:** `15_unified_api_demo.go`
+
+**🚀 MODERN API:** Comprehensive demonstration of VittoriaDB's new unified, schema-based API using Go HTTP client:
+- Document-oriented database with flexible schemas
+- Full-text search with advanced filtering and boosting
+- Vector similarity search with configurable thresholds
+- Hybrid search combining text and vector search
+- Faceted search for analytics and insights
+- High-performance search capabilities
+
+**Usage:**
+```bash
+cd examples/go
+go run 15_unified_api_demo.go
+```
+
+**Features:**
+- ✅ **Schema-based documents** - Structured document storage with validation
+- ✅ **Multiple search modes** - Full-text, vector, and hybrid search
+- ✅ **Advanced filtering** - Complex where clauses and conditions
+- ✅ **Faceted analytics** - Category and brand breakdowns
+- ✅ **Performance testing** - Multi-search performance benchmarks
+- ✅ **HTTP client implementation** - Production-ready API client
+
+**🎯 API Highlights:**
+```go
+// Create database with schema
+schema := map[string]interface{}{
+    "name": "string",
+    "description": "string",
+    "price": "number",
+    "embedding": "vector[384]",
+    "meta": map[string]interface{}{
+        "rating": "number",
+    },
+}
+client.CreateDatabase(schema)
+
+// Insert documents
+client.InsertDocument(map[string]interface{}{
+    "name": "Noise Cancelling Headphones",
+    "description": "Premium wireless headphones",
+    "price": 299.99,
+    "embedding": generateRandomVector(384),
+    "meta": map[string]interface{}{"rating": 4.8},
+})
+
+// Search with different modes
+results, _ := client.Search(map[string]interface{}{
+    "term": "wireless", "mode": "fulltext",
+})
+```
 
 #### 10. Large Text Processing Demo
 **File:** `10_large_text_processing_demo.go`

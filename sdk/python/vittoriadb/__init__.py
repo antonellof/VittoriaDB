@@ -46,6 +46,7 @@ Server Management:
 """
 
 from .client import VittoriaDB, Collection, connect
+from .document import VittoriaDocument, create as create_document_db
 from .types import (
     Vector,
     SearchResult,
@@ -66,7 +67,7 @@ from .types import (
 )
 from . import configure
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __author__ = "VittoriaDB Team"
 __email__ = "team@vittoriadb.dev"
 
@@ -74,6 +75,8 @@ __all__ = [
     "VittoriaDB",
     "Collection", 
     "connect",
+    "VittoriaDocument",
+    "create_document_db",
     "Vector",
     "SearchResult",
     "CollectionInfo",

@@ -97,6 +97,9 @@ func (s *Server) setupRoutes() {
 	// Document processing
 	s.router.HandleFunc("/collections/{name}/documents", s.handleDocumentUpload).Methods("POST")
 	s.router.HandleFunc("/documents/process", s.handleDocumentProcess).Methods("POST")
+
+	// Unified API routes (schema-based document API)
+	s.setupDocumentRoutes()
 	s.router.HandleFunc("/documents/supported", s.handleSupportedFormats).Methods("GET")
 
 	// Web dashboard (simple HTML page)
@@ -158,11 +161,11 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			"async_io":           s.unifiedConfig.Performance.IO.AsyncIO,
 		},
 		"performance": map[string]interface{}{
-			"max_workers":      s.unifiedConfig.Search.Parallel.MaxWorkers,
-			"cache_entries":    s.unifiedConfig.Search.Cache.MaxEntries,
-			"cache_ttl":        s.unifiedConfig.Search.Cache.TTL.String(),
-			"max_concurrency":  s.unifiedConfig.Performance.MaxConcurrency,
-			"memory_limit_mb":  s.unifiedConfig.Performance.MemoryLimit / (1024 * 1024),
+			"max_workers":     s.unifiedConfig.Search.Parallel.MaxWorkers,
+			"cache_entries":   s.unifiedConfig.Search.Cache.MaxEntries,
+			"cache_ttl":       s.unifiedConfig.Search.Cache.TTL.String(),
+			"max_concurrency": s.unifiedConfig.Performance.MaxConcurrency,
+			"memory_limit_mb": s.unifiedConfig.Performance.MemoryLimit / (1024 * 1024),
 		},
 	}
 
@@ -739,7 +742,7 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 	var limit int = 10
 	var includeMetadata bool = true
 	var includeContent bool = false
-	
+
 	if r.Method == "POST" {
 		// Parse JSON body for POST requests
 		var req struct {
@@ -765,17 +768,17 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 			s.writeError(w, http.StatusBadRequest, "Missing query parameter", nil)
 			return
 		}
-		
+
 		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 			if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
 				limit = parsedLimit
 			}
 		}
-		
+
 		if metadataStr := r.URL.Query().Get("include_metadata"); metadataStr != "" {
 			includeMetadata = metadataStr == "true"
 		}
-		
+
 		if contentStr := r.URL.Query().Get("include_content"); contentStr != "" {
 			includeContent = contentStr == "true"
 		}
@@ -800,14 +803,14 @@ func (s *Server) handleTextSearch(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "No vectorizer available", nil)
 		return
 	}
-	
+
 	// Generate embedding from query text
 	queryEmbedding, err := vectorizer.GenerateEmbedding(r.Context(), query)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, "Failed to generate query embedding", err)
 		return
 	}
-	
+
 	searchReq.Vector = queryEmbedding
 	results, err := collection.Search(r.Context(), searchReq)
 	if err != nil {

@@ -84,7 +84,10 @@ db = vittoriadb.connect(
 
 ## 🚀 Quick Start
 
-### Basic Usage
+VittoriaDB offers two complementary APIs for different use cases:
+
+### Collection-Based API (Vector Operations)
+Perfect for direct vector operations and similarity search:
 
 ```python
 import vittoriadb
@@ -94,7 +97,7 @@ db = vittoriadb.connect()
 
 # Create a collection
 collection = db.create_collection(
-    name="documents",
+    name="vectors",
     dimensions=384,
     metric="cosine"
 )
@@ -121,7 +124,65 @@ for result in results:
 db.close()
 ```
 
-### Automatic Text Embeddings (🚀 NEW!)
+### Document-Based API (Schema & Documents)
+Perfect for structured documents with full-text and vector search:
+
+```python
+from vittoriadb import create_document_db
+
+# Create database with schema
+db = create_document_db({
+    "title": "string",
+    "content": "string", 
+    "price": "number",
+    "embedding": "vector[384]",
+    "metadata": {"author": "string"}
+})
+
+# Insert documents
+db.insert({
+    "id": "doc1",
+    "title": "Noise cancelling headphones",
+    "content": "Best headphones on the market",
+    "price": 99.99,
+    "embedding": [0.1, 0.2, 0.3] * 128,  # 384 dimensions
+    "metadata": {"author": "John Doe"}
+})
+
+# Full-text search
+results = db.search(term="headphones", mode="fulltext", limit=5)
+
+# Vector search
+results = db.search(
+    mode="vector",
+    vector=[0.1, 0.2, 0.3] * 128,
+    similarity=0.8,
+    limit=5
+)
+
+# Hybrid search (combines text and vector)
+results = db.search(
+    term="best headphones",
+    mode="hybrid", 
+    vector=[0.1, 0.2, 0.3] * 128,
+    limit=5
+)
+
+# Advanced search with filters and facets
+results = db.search(
+    term="headphones",
+    where={"price": {"lt": 200}},
+    facets={"metadata.author": {"type": "string", "limit": 10}},
+    sort_by={"price": "asc"},
+    limit=10
+)
+
+for hit in results["hits"]:
+    doc = hit["document"]
+    print(f"Title: {doc['title']}, Price: ${doc['price']}")
+```
+
+### Automatic Text Embeddings
 
 ```python
 import vittoriadb
