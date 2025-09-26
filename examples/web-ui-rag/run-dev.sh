@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # VittoriaDB RAG Web UI - Development Runner
-# This script starts the development environment using Docker Compose
+# Simple script to start the development environment
 
 set -e
 
-echo "🚀 Starting VittoriaDB RAG Web UI Development Environment"
-echo "=================================================="
+echo "🚀 VittoriaDB RAG Web UI - Development Environment"
+echo "================================================="
 
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
@@ -14,15 +14,26 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
-# Check if .env file exists
-if [ ! -f .env ]; then
-    echo "⚠️  No .env file found. Creating from env.development..."
-    cp env.development .env
-    echo "📝 Please edit .env file with your API keys before continuing."
-    echo "   Required: OPENAI_API_KEY"
-    echo "   Optional: GITHUB_TOKEN"
-    read -p "Press Enter to continue after editing .env file..."
+# Check required environment variables
+echo "🔍 Checking environment variables..."
+if [ -z "$OPENAI_API_KEY" ]; then
+    echo "❌ OPENAI_API_KEY environment variable is required"
+    echo "   Set it with: export OPENAI_API_KEY=your_api_key_here"
+    exit 1
 fi
+
+if [ -z "$OLLAMA_URL" ]; then
+    export OLLAMA_URL="http://ollama:11434"
+    echo "🔧 OLLAMA_URL set to default: $OLLAMA_URL"
+fi
+
+if [ -z "$GITHUB_TOKEN" ]; then
+    echo "⚠️  GITHUB_TOKEN not set (optional for private repos)"
+else
+    echo "✅ GITHUB_TOKEN is set"
+fi
+
+echo "✅ Environment variables configured"
 
 # Build and start services
 echo "🔨 Building and starting services..."

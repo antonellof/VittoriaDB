@@ -49,14 +49,13 @@ The easiest way to run the complete RAG system with all dependencies:
 # 1. Clone and navigate to the web UI directory
 cd examples/web-ui-rag
 
-# 2. Configure environment variables
-cp env.example .env
-# Edit .env with your API keys (OpenAI, HuggingFace, etc.)
+# 2. Set up environment variables (secure approach)
+export OPENAI_API_KEY=your_openai_api_key_here
+export GITHUB_TOKEN=your_github_token_here  # optional
+export OLLAMA_URL=http://ollama:11434        # optional
 
-# 3. Start all services with Docker Compose
-./run-dev.sh    # For development
-# OR
-./run-prod.sh   # For production
+# 3. Start the development environment
+./run-dev.sh
 ```
 
 **What's included:**
@@ -71,19 +70,20 @@ cp env.example .env
 
 ### 📋 Environment Configuration
 
-Copy and configure the environment file:
+**🔐 Secure Environment Variable Setup:**
+
+Set your API keys as system environment variables (recommended for security):
 
 ```bash
-cp env.example .env
-```
+# Required for AI functionality
+export OPENAI_API_KEY=your_openai_api_key_here
 
-**Required API Keys:**
-```bash
-# OpenAI (for embeddings and chat) - REQUIRED
-OPENAI_API_KEY=your_openai_api_key_here
+# Optional but recommended
+export GITHUB_TOKEN=your_github_token_here    # For private repos and higher rate limits
+export OLLAMA_URL=http://ollama:11434          # For local ML models
 
-# Optional: GitHub (for repository indexing and higher rate limits)
-GITHUB_TOKEN=your_github_token_here
+# Use the interactive setup script
+./setup-env.sh
 
 # Service URLs (default values work for Docker Compose)
 VITTORIADB_URL=http://localhost:8080
@@ -186,13 +186,14 @@ frontend/
 ### Environment Variables
 
 ```bash
-# Backend (.env)
-OPENAI_API_KEY=your_openai_key_here
-VITTORIADB_URL=http://localhost:8080
-OLLAMA_URL=http://localhost:11434
+# Set environment variables (secure approach)
+export OPENAI_API_KEY=your_openai_key_here
+export GITHUB_TOKEN=your_github_token_here  # optional
+export VITTORIADB_URL=http://localhost:8080
+export OLLAMA_URL=http://localhost:11434
 
-# Frontend (.env.local)
-NEXT_PUBLIC_API_URL=http://localhost:8501
+# Frontend environment (if running separately)
+export NEXT_PUBLIC_API_URL=http://localhost:8501
 ```
 
 ## 🐳 Docker Architecture

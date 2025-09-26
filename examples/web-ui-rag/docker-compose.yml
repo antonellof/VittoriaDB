@@ -31,10 +31,10 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - VITTORIADB_URL=http://vittoriadb:8080
-      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
-      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - OLLAMA_URL=${OLLAMA_URL}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
       - PORT=8501
       - HOST=0.0.0.0
       - LOG_LEVEL=INFO
