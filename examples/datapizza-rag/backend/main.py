@@ -729,15 +729,21 @@ Content: {result.content[:600]}...
                 user_prompt = f"{conversation_history}User: {request.message}\nAssistant:"
                 
                 # Stream the response using Datapizza AI streaming
-                async for chunk in rag_system.openai_client.a_stream_invoke(
-                    input=user_prompt,
-                    system=system_prompt,
+                # Build messages array for streaming
+                stream_messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ]
+                
+                async for chunk in rag_system.openai_client.client.chat.completions.create(
                     model=model_to_use,
+                    messages=stream_messages,
                     temperature=0.7,
-                    max_tokens=1500
+                    max_tokens=1500,
+                    stream=True
                 ):
-                    if chunk.delta:
-                        yield f"data: {json.dumps({'type': 'content', 'content': chunk.delta})}\n\n"
+                    if chunk.choices[0].delta.content:
+                        yield f"data: {json.dumps({'type': 'content', 'content': chunk.choices[0].delta.content})}\n\n"
                         await asyncio.sleep(0.001)
                 
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
@@ -1018,17 +1024,17 @@ Show me examples of the core functionality?
                 conversation_prompt += f"{role.capitalize()}: {msg['content']}\n"
             conversation_prompt += "Assistant:"
             
-            # Stream response using Datapizza AI
+            # Stream response using Datapizza AI OpenAI client
             response_chunks = []
-            async for chunk in rag_system.openai_client.a_stream_invoke(
-                input=conversation_prompt,
-                system=messages[0]['content'],  # First message is system prompt
+            async for chunk in rag_system.openai_client.client.chat.completions.create(
                 model=request.model,
+                messages=messages,
                 temperature=0.7,
-                max_tokens=1500
+                max_tokens=1500,
+                stream=True
             ):
-                if chunk.delta:
-                    content = chunk.delta
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
                     response_chunks.append(content)
                     yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
             
