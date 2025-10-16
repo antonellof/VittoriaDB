@@ -728,25 +728,16 @@ Content: {result.content[:600]}...
                 # Build the full prompt with user's current message
                 user_prompt = f"{conversation_history}User: {request.message}\nAssistant:"
                 
-                # Stream the response using Datapizza AI streaming
-                # Build messages array for streaming
-                stream_messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ]
-                
-                # Create the stream (await first, then iterate)
-                stream = await rag_system.openai_client.client.chat.completions.create(
+                # Stream using Datapizza AI's a_stream_invoke method
+                async for chunk in rag_system.openai_client.a_stream_invoke(
+                    input=user_prompt,
+                    system_prompt=system_prompt,
                     model=model_to_use,
-                    messages=stream_messages,
                     temperature=0.7,
-                    max_tokens=1500,
-                    stream=True
-                )
-                
-                async for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        yield f"data: {json.dumps({'type': 'content', 'content': chunk.choices[0].delta.content})}\n\n"
+                    max_tokens=1500
+                ):
+                    if chunk.delta:
+                        yield f"data: {json.dumps({'type': 'content', 'content': chunk.delta})}\n\n"
                         await asyncio.sleep(0.001)
                 
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
@@ -1027,20 +1018,17 @@ Show me examples of the core functionality?
                 conversation_prompt += f"{role.capitalize()}: {msg['content']}\n"
             conversation_prompt += "Assistant:"
             
-            # Stream response using Datapizza AI OpenAI client
+            # Stream response using Datapizza AI's a_stream_invoke method
             response_chunks = []
-            # Create the stream (await first, then iterate)
-            stream = await rag_system.openai_client.client.chat.completions.create(
+            async for chunk in rag_system.openai_client.a_stream_invoke(
+                input=conversation_prompt,
+                system_prompt=system_prompt,
                 model=request.model,
-                messages=messages,
                 temperature=0.7,
-                max_tokens=1500,
-                stream=True
-            )
-            
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
+                max_tokens=1500
+            ):
+                if chunk.delta:
+                    content = chunk.delta
                     response_chunks.append(content)
                     yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
             
