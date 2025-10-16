@@ -16,8 +16,8 @@ import re
 from github import Github
 import git
 
-# Import chunking function from rag_system
-from rag_system import chunk_text
+# Import chunking function from legacy rag_system
+from text_utils import chunk_text
 
 logger = logging.getLogger(__name__)
 

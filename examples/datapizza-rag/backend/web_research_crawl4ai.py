@@ -832,9 +832,10 @@ Return ONLY in this exact JSON format:
             
             # Store in web_research collection
             stored_doc_id = await rag_system.add_document(
+                collection_name="web_research",
+                doc_id=doc_id,
                 content=enhanced_content,
-                metadata=metadata,
-                collection_name="web_research"
+                metadata=metadata
             )
             
             return stored_doc_id

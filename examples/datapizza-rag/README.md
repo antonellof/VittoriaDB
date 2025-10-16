@@ -4,6 +4,7 @@ A complete, production-ready RAG (Retrieval-Augmented Generation) system powered
 
 ## ✨ What's Inside
 
+- **🍕 Datapizza AI Pipelines**: Production-ready RAG with `IngestionPipeline` & `DagPipeline` architecture
 - **🧠 Datapizza AI Integration**: Modern AI framework for embeddings and LLM streaming (OpenAI & Ollama)
 - **⚡ VittoriaDB**: High-performance HNSW vector database for semantic search
 - **💬 Chat Interface**: Beautiful Next.js UI with real-time streaming responses
@@ -11,6 +12,9 @@ A complete, production-ready RAG (Retrieval-Augmented Generation) system powered
 - **🌐 Web Research**: Live web search with automatic knowledge storage using Crawl4AI
 - **💻 GitHub Indexing**: Index and search through code repositories
 - **🐳 Docker Support**: One-command deployment with Docker Compose
+
+> **🆕 NEW**: Now using Datapizza AI's pipeline architecture for modular, production-ready RAG!  
+> See [`DATAPIZZA_PIPELINE_INTEGRATION.md`](./DATAPIZZA_PIPELINE_INTEGRATION.md) for details.
 
 ## 🏗️ Architecture
 

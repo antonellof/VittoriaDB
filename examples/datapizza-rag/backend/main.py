@@ -1157,7 +1157,13 @@ Content: {result.get('content', result.get('text', 'No content'))}
 """
                 
                 # Store in RAG system
+                # Generate unique doc_id
+                content_hash = hashlib.md5(f"{result.get('url', '')}_{query}".encode()).hexdigest()
+                doc_id = f"web_search_{content_hash}"
+                
                 document_id = await rag_system.add_document(
+                    collection_name='web_research',
+                    doc_id=doc_id,
                     content=enhanced_content,
                     metadata={
                         'source': 'web_search',
@@ -1168,8 +1174,7 @@ Content: {result.get('content', result.get('text', 'No content'))}
                         'search_engine': search_engine,
                         'timestamp': time.time(),
                         'research_id': research_id
-                    },
-                    collection_name='web_research'
+                    }
                 )
                 stored_ids.append(document_id)
                 
@@ -1309,10 +1314,15 @@ async def websocket_chat(websocket: WebSocket):
                                 'extraction_method': 'crawl4ai_cosine'
                             }
                             
+                            # Generate unique doc_id
+                            content_hash = hashlib.md5(f"{result.url}_{request.message}_crawl4ai".encode()).hexdigest()
+                            doc_id = f"web_crawl4ai_{content_hash}"
+                            
                             await rag_system.add_document(
+                                collection_name='web_research',
+                                doc_id=doc_id,
                                 content=enhanced_content,
-                                metadata=metadata,
-                                collection_name='web_research'
+                                metadata=metadata
                             )
                             stored_count += 1
                         except Exception as e:
@@ -1512,10 +1522,13 @@ async def process_file_background(file_content: bytes, filename: str, document_i
                 # Fallback to individual insertion
                 for doc in batch_docs:
                     try:
-                        await rag_system.add_document(
+                        # Generate doc_id from content hash
+                        doc_id = doc.get('id') or doc.get('doc_id') or f"doc_{hash(doc['content'])}"
+                        await rag_system.add_prechunked_document(
+                            collection_name='documents',
+                            doc_id=doc_id,
                             content=doc['content'],
-                            metadata=doc['metadata'],
-                            collection_name='documents'
+                            metadata=doc['metadata']
                         )
                         chunks_stored += 1
                     except Exception as fallback_error:
@@ -1530,7 +1543,7 @@ async def process_file_background(file_content: bytes, filename: str, document_i
         )
         
         # Update stats
-        stats = await rag_system.get_stats()
+        stats = rag_system.get_collection_stats()
         await notification_service.notify_stats_update(stats)
         
         logger.info("Background processing completed", 
@@ -1699,10 +1712,15 @@ async def web_research_stream(request: WebResearchRequest):
                     }
                     
                     # Store in RAG system
+                    # Generate unique doc_id
+                    content_hash = hashlib.md5(f"{result.url}_{request.query}_crawl4ai".encode()).hexdigest()
+                    generated_doc_id = f"web_crawl4ai_{content_hash}"
+                    
                     doc_id = await rag_system.add_document(
+                        collection_name="web_research",
+                        doc_id=generated_doc_id,
                         content=enhanced_content,
-                        metadata=metadata,
-                        collection_name="web_research"
+                        metadata=metadata
                     )
                     
                     if doc_id:
@@ -2087,7 +2105,7 @@ async def background_github_indexing(repo_url: str, indexing_id: str):
         )
         
         # Update stats
-        stats = await rag_system.get_stats()
+        stats = rag_system.get_collection_stats()
         await notification_service.notify_stats_update(stats)
         
         logger.info("Background GitHub indexing completed", 
@@ -2509,7 +2527,10 @@ async def create_chat_session(request: ChatSessionCreateRequest):
         )
         
         # Store session metadata in VittoriaDB
+        session_doc_id = f"chat_session_{session_id}"
         await rag_system.add_document(
+            collection_name='chat_history',
+            doc_id=session_doc_id,
             content=f"Chat Session: {title}",
             metadata={
                 'type': 'chat_session',
@@ -2517,8 +2538,7 @@ async def create_chat_session(request: ChatSessionCreateRequest):
                 'title': title,
                 'created_at': session.created_at,
                 'message_count': 0
-            },
-            collection_name='chat_history'
+            }
         )
         
         logger.info("Chat session created", session_id=session_id, title=title)
@@ -2614,10 +2634,12 @@ Message:
                 ]
             
             # Store in VittoriaDB
+            message_doc_id = f"chat_msg_{request.session_id}_{saved_count}_{time.time()}"
             await rag_system.add_document(
+                collection_name='chat_history',
+                doc_id=message_doc_id,
                 content=content,
-                metadata=metadata,
-                collection_name='chat_history'
+                metadata=metadata
             )
             
             saved_count += 1
@@ -2628,7 +2650,10 @@ Message:
         
         # Update session metadata
         session_metadata_content = f"Chat Session {request.session_id} - {saved_count} messages"
+        session_update_doc_id = f"chat_session_update_{request.session_id}_{time.time()}"
         await rag_system.add_document(
+            collection_name='chat_history',
+            doc_id=session_update_doc_id,
             content=session_metadata_content,
             metadata={
                 'type': 'chat_session_update',
@@ -2636,8 +2661,7 @@ Message:
                 'message_count': saved_count,
                 'last_message_preview': last_message_preview,
                 'updated_at': time.time()
-            },
-            collection_name='chat_history'
+            }
         )
         
         logger.info("Chat history saved", session_id=request.session_id, saved_count=saved_count)

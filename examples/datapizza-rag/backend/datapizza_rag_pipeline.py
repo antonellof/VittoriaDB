@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class DatapizzaRAGConfig:
     """Configuration for Datapizza RAG pipeline"""
     openai_api_key: str
-    vittoriadb_url: str = "http://vittoriadb:8080"
+    vittoriadb_url: str = "http://localhost:8080"  # Default for local development
     embedding_model: str = "text-embedding-ada-002"
     embedding_dimensions: int = 1536
     llm_model: str = "gpt-4o-mini"
@@ -127,6 +127,8 @@ Based on the above context, answer the user's question accurately and comprehens
         """
         Create a Datapizza IngestionPipeline for document processing.
         
+        Supports: PDF, DOCX, TXT, MD, HTML, and more via DoclingParser.
+        
         Args:
             collection_name: Target collection name
             
@@ -135,15 +137,12 @@ Based on the above context, answer the user's question accurately and comprehens
         """
         pipeline = IngestionPipeline(
             modules=[
-                # Note: TextParser is used for plain text. For PDF/DOCX, use:
-                # - DoclingParser() (requires: pip install datapizza-ai-parsers-docling)
-                # - AzureParser() (requires Azure credentials)
-                
+                # Split text into chunks
                 NodeSplitter(
-                    max_char=self.config.chunk_size,
-                    overlap=self.config.chunk_overlap
+                    max_char=self.config.chunk_size
                 ),
                 
+                # Generate embeddings for each chunk
                 ChunkEmbedder(client=self.embedder),
             ],
             vector_store=self.vectorstore,
@@ -170,8 +169,7 @@ Based on the above context, answer the user's question accurately and comprehens
         try:
             pipeline = self.create_ingestion_pipeline(collection_name)
             
-            # For plain text, we'll process it manually since we don't have a file
-            # Create a temporary text file
+            # Create a temporary text file for DoclingParser
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
                 f.write(text)
@@ -179,8 +177,9 @@ Based on the above context, answer the user's question accurately and comprehens
             
             try:
                 pipeline.run(temp_path, metadata=metadata or {})
-                logger.info(f"✅ Ingested text into '{collection_name}'")
+                logger.info(f"✅ Ingested text ({len(text)} chars) into '{collection_name}'")
             finally:
+                # Clean up temp file
                 os.unlink(temp_path)
                 
         except Exception as e:
@@ -196,18 +195,25 @@ Based on the above context, answer the user's question accurately and comprehens
         """
         Ingest a document file into the collection.
         
+        Supports: PDF, DOCX, TXT, MD, HTML, and more via DoclingParser.
+        
         Args:
-            file_path: Path to the document
+            file_path: Path to the document (PDF, DOCX, TXT, etc.)
             collection_name: Target collection
             metadata: Optional metadata to attach
         """
         try:
+            # Get file extension for logging
+            file_ext = os.path.splitext(file_path)[1].upper()
+            logger.info(f"📄 Processing {file_ext} file: {file_path}")
+            
             pipeline = self.create_ingestion_pipeline(collection_name)
             pipeline.run(file_path, metadata=metadata or {})
-            logger.info(f"✅ Ingested '{file_path}' into '{collection_name}'")
+            
+            logger.info(f"✅ Ingested {file_ext} '{os.path.basename(file_path)}' into '{collection_name}'")
             
         except Exception as e:
-            logger.error(f"❌ Failed to ingest file: {e}")
+            logger.error(f"❌ Failed to ingest file '{file_path}': {e}")
             raise
     
     def create_retrieval_pipeline(self, collection_name: str) -> DagPipeline:
@@ -362,21 +368,21 @@ Based on the above context, answer the user's question accurately and comprehens
 # Factory function for easy initialization
 def create_datapizza_rag_pipeline(
     openai_api_key: Optional[str] = None,
-    vittoriadb_url: str = "http://vittoriadb:8080"
+    vittoriadb_url: Optional[str] = None
 ) -> DatapizzaRAGPipeline:
     """
     Create a DatapizzaRAGPipeline with default configuration.
     
     Args:
         openai_api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
-        vittoriadb_url: VittoriaDB server URL
+        vittoriadb_url: VittoriaDB server URL (defaults to VITTORIADB_URL env var or localhost:8080)
         
     Returns:
         Configured DatapizzaRAGPipeline
     """
     config = DatapizzaRAGConfig(
         openai_api_key=openai_api_key or os.getenv('OPENAI_API_KEY'),
-        vittoriadb_url=vittoriadb_url,
+        vittoriadb_url=vittoriadb_url or os.getenv('VITTORIADB_URL', 'http://localhost:8080'),
         embedding_model=os.getenv('OPENAI_EMBED_MODEL', 'text-embedding-ada-002'),
         embedding_dimensions=int(os.getenv('OPENAI_EMBED_DIMENSIONS', '1536')),
         llm_model=os.getenv('LLM_MODEL', 'gpt-4o-mini'),

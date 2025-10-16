@@ -51,6 +51,14 @@ class RAGSystemV2:
         self.collections = {}
         self.default_collections = ['documents', 'web_research', 'github_code', 'chat_history']
         
+        # Collection configurations for stats display
+        self.collection_configs = {
+            'documents': {'description': 'User uploaded documents'},
+            'web_research': {'description': 'Web research results'},
+            'github_code': {'description': 'GitHub repository code'},
+            'chat_history': {'description': 'Chat conversation history'}
+        }
+        
         # For compatibility with old interface
         self.openai_client = self.pipeline.llm_client
         self.embedder = self.pipeline.embedder
@@ -158,17 +166,54 @@ class RAGSystemV2:
             logger.error(f"❌ Failed to add document: {e}")
             raise
     
+    async def add_prechunked_document(
+        self,
+        collection_name: str,
+        doc_id: str,
+        content: str,
+        metadata: Dict[str, Any]
+    ):
+        """
+        Add a pre-chunked document directly to VittoriaDB without re-chunking.
+        This is used when documents are already processed by file_processor.
+        """
+        try:
+            # Ensure collection exists
+            if collection_name not in self.collections:
+                self.pipeline.create_collection(collection_name, replace_existing=False)
+                self.collections[collection_name] = collection_name
+            
+            # Generate embedding for the content
+            embedding = self.embedder.embed(text=content)
+            
+            # Store content in metadata for retrieval
+            metadata_with_content = {**metadata, 'content': content}
+            
+            # Insert directly into VittoriaDB using correct API signature
+            collection = self.vectorstore.db.get_collection(collection_name)
+            collection.insert(
+                id=doc_id,
+                vector=embedding,
+                metadata=metadata_with_content
+            )
+            
+            logger.info(f"✅ Added pre-chunked document '{doc_id}' to '{collection_name}'")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to add pre-chunked document: {e}")
+            raise
+    
     async def add_documents_batch(
         self,
         collection_name: str,
         documents: List[Dict[str, Any]]
     ):
         """
-        Add multiple documents in batch.
-        Compatible with old interface.
+        Add multiple pre-chunked documents in batch.
+        Compatible with old interface (expects already-chunked content from file_processor).
         """
         for doc in documents:
-            await self.add_document(
+            await self.add_prechunked_document(
                 collection_name=collection_name,
                 doc_id=doc.get('id', doc.get('doc_id', f"doc_{hash(doc['content'])}")),
                 content=doc['content'],
@@ -177,17 +222,58 @@ class RAGSystemV2:
     
     def get_collection_stats(self) -> Dict[str, Any]:
         """Get statistics for all collections"""
+        import requests
         stats = {}
+        
         for collection_name in self.collections:
             try:
-                # VittoriaDB doesn't have a direct count method
-                # We'll return the collection names for now
+                # Get detailed collection info directly from VittoriaDB API
+                response = requests.get(f"{self.vittoriadb_url}/collections/{collection_name}")
+                if response.status_code == 200:
+                    api_info = response.json()
+                    
+                    # Map index_type number to string
+                    index_type_map = {0: "flat", 1: "hnsw"}
+                    index_type = index_type_map.get(api_info.get('index_type', 0), "unknown")
+                    
+                    # Map metric number to string  
+                    metric_map = {0: "cosine", 1: "euclidean", 2: "dot"}
+                    metric = metric_map.get(api_info.get('metric', 0), "unknown")
+                    
+                    stats[collection_name] = {
+                        'name': api_info['name'],
+                        'vector_count': api_info['vector_count'],
+                        'dimensions': api_info['dimensions'],
+                        'metric': metric,
+                        'index_type': index_type,
+                        'description': self.collection_configs.get(collection_name, {}).get('description', ''),
+                        'status': 'active'
+                    }
+                else:
+                    # Fallback to placeholder if API call fails
+                    logger.warning(f"⚠️ Could not get stats for '{collection_name}': HTTP {response.status_code}")
+                    stats[collection_name] = {
+                        'name': collection_name,
+                        'vector_count': 0,
+                        'dimensions': self.pipeline.config.embedding_dimensions,
+                        'metric': 'cosine',
+                        'index_type': 'unknown',
+                        'description': self.collection_configs.get(collection_name, {}).get('description', ''),
+                        'status': 'error'
+                    }
+                    
+            except Exception as e:
+                logger.error(f"❌ Failed to get stats for '{collection_name}': {e}")
                 stats[collection_name] = {
                     'name': collection_name,
-                    'status': 'active'
+                    'vector_count': 0,
+                    'dimensions': self.pipeline.config.embedding_dimensions,
+                    'metric': 'cosine',
+                    'index_type': 'unknown',
+                    'description': self.collection_configs.get(collection_name, {}).get('description', ''),
+                    'status': 'error',
+                    'error': str(e)
                 }
-            except Exception as e:
-                logger.warning(f"⚠️ Could not get stats for '{collection_name}': {e}")
         
         return stats
     
@@ -218,6 +304,125 @@ class RAGSystemV2:
             logger.error(f"❌ Response generation failed: {e}")
             return f"❌ Error: {str(e)}"
     
+    async def list_documents(self, collection_name: str = 'documents', limit: int = 200) -> List[Dict[str, Any]]:
+        """List all documents in a collection WITHOUT using embeddings (direct VittoriaDB access)"""
+        try:
+            if collection_name not in self.collections:
+                raise ValueError(f"Collection '{collection_name}' not found")
+            
+            logger.info(f"🔍 Listing documents from {collection_name} using direct VittoriaDB access (NO embeddings)")
+            
+            # Use VittoriaDB Python SDK directly to avoid embedding generation
+            collection = self.vectorstore.db.get_collection(collection_name)
+            
+            # Try to get all vectors using the VittoriaDB SDK
+            try:
+                import numpy as np
+                
+                # Create a zero vector with the right dimensions
+                dimensions = self.pipeline.config.embedding_dimensions
+                zero_vector = np.zeros(dimensions).tolist()
+                
+                # Search with zero vector to get everything
+                results = collection.search(
+                    vector=zero_vector,
+                    limit=limit
+                )
+                
+                documents = []
+                for result in results:
+                    # Extract data from VittoriaDB result
+                    result_dict = result.__dict__ if hasattr(result, '__dict__') else {}
+                    
+                    documents.append({
+                        'id': result_dict.get('id', 'unknown'),
+                        'metadata': result_dict.get('metadata', {}),
+                        'score': result_dict.get('score', 0.0),
+                        'content': result_dict.get('content', '')
+                    })
+                
+                logger.info(f"📋 Listed {len(documents)} documents using VittoriaDB SDK (no embeddings)")
+                return documents
+                
+            except Exception as sdk_error:
+                logger.error(f"❌ Failed to list documents using SDK: {sdk_error}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to list documents: {str(e)}")
+            return []
+    
+    async def get_original_documents(self, collection_name: str = 'documents') -> List[Dict[str, Any]]:
+        """Get original documents (grouped by source file) instead of individual chunks"""
+        try:
+            if collection_name not in self.collections:
+                raise ValueError(f"Collection '{collection_name}' not found")
+            
+            # Get all chunks from the collection
+            documents = await self.list_documents(collection_name, 1000)
+            logger.info(f"🔍 Retrieved {len(documents)} raw documents from list_documents")
+            
+            # Group chunks by original document
+            document_groups = {}
+            
+            for doc in documents:
+                metadata = doc.get('metadata', {})
+                
+                # Use document_id as the primary grouping key, but try multiple fields
+                doc_id = (metadata.get('document_id') or 
+                         metadata.get('content_hash') or 
+                         metadata.get('filename') or
+                         doc.get('id'))
+                
+                if not doc_id:
+                    logger.warning(f"⚠️ No document ID found for chunk: {doc}")
+                    continue
+                
+                # Extract original document info
+                filename = metadata.get('filename', 'Unknown File')
+                title = metadata.get('title', filename)
+                file_type = metadata.get('file_type', 'unknown')
+                upload_timestamp = metadata.get('upload_timestamp', metadata.get('timestamp', 0))
+                content_hash = metadata.get('content_hash', '')
+                
+                if doc_id not in document_groups:
+                    document_groups[doc_id] = {
+                        'document_id': doc_id,
+                        'filename': filename,
+                        'title': title,
+                        'file_type': file_type,
+                        'upload_timestamp': upload_timestamp,
+                        'content_hash': content_hash,
+                        'collection': collection_name,
+                        'chunks': [],
+                        'total_chunks': 0,
+                        'total_size': 0
+                    }
+                
+                # Add chunk info
+                document_groups[doc_id]['chunks'].append({
+                    'chunk_id': doc['id'],
+                    'content_preview': doc.get('content', '')[:200] + '...' if doc.get('content') else 'No content',
+                    'score': doc.get('score', 0.0),
+                    'metadata': metadata
+                })
+                
+                document_groups[doc_id]['total_chunks'] += 1
+                if doc.get('content'):
+                    document_groups[doc_id]['total_size'] += len(doc.get('content', ''))
+            
+            # Convert to list and sort by upload time (newest first)
+            original_documents = list(document_groups.values())
+            original_documents.sort(key=lambda x: x['upload_timestamp'], reverse=True)
+            
+            logger.info(f"📋 Found {len(original_documents)} original documents with {sum(d['total_chunks'] for d in original_documents)} total chunks")
+            
+            return original_documents
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to get original documents: {str(e)}")
+            return []
+    
     async def delete_document(self, collection_name: str, doc_id: str):
         """Delete a document from a collection"""
         try:
@@ -228,6 +433,14 @@ class RAGSystemV2:
         except Exception as e:
             logger.error(f"❌ Failed to delete document: {e}")
             raise
+    
+    def close(self):
+        """Close connections and cleanup resources"""
+        try:
+            # VittoriaDB SDK handles cleanup internally
+            logger.info("✅ RAG System V2 closed successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to close RAG system: {e}")
 
 
 # Global instance
