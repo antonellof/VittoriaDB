@@ -11,6 +11,14 @@ vittoriadb>=0.2.0
 # Datapizza AI - Modern AI framework for LLM, embeddings, and RAG
 # https://datapizza.tech/en/ai-framework/
 datapizza-ai
+datapizza-ai-core
+datapizza-ai-clients-openai
+datapizza-ai-embedders-openai
+datapizza-ai-modules-parsers
+datapizza-ai-modules-splitters
+datapizza-ai-modules-prompt
+datapizza-ai-modules-rewriters
+datapizza-ai-pipeline
 
 # Web research and scraping
 requests>=2.31.0
