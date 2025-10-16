@@ -278,8 +278,11 @@ async def get_health_status():
             except:
                 vittoriadb_connected = False
         
-        # Check OpenAI configuration
-        openai_configured = bool(os.getenv('OPENAI_API_KEY'))
+        # Check OpenAI configuration (check if key exists and is not empty/placeholder)
+        openai_key = os.getenv('OPENAI_API_KEY', '')
+        openai_configured = bool(openai_key and openai_key.strip() and 
+                                openai_key != 'your-openai-api-key-here' and
+                                len(openai_key) > 10)
         
         return {
             "status": "healthy" if vittoriadb_connected else "degraded",
@@ -308,8 +311,11 @@ async def health_check():
             except:
                 vittoriadb_connected = False
         
-        # Check OpenAI configuration
-        openai_configured = bool(os.getenv('OPENAI_API_KEY'))
+        # Check OpenAI configuration (check if key exists and is not empty/placeholder)
+        openai_key = os.getenv('OPENAI_API_KEY', '')
+        openai_configured = bool(openai_key and openai_key.strip() and 
+                                openai_key != 'your-openai-api-key-here' and
+                                len(openai_key) > 10)
         
         return HealthResponse(
             status="healthy" if vittoriadb_connected else "degraded",
@@ -712,32 +718,26 @@ Content: {result.content[:600]}...
                     yield f"data: {json.dumps({'type': 'error', 'message': 'OpenAI not configured'})}\n\n"
                     return
                 
-                # Build messages array with chat history
-                messages = [{"role": "system", "content": system_prompt}]
-                
-                # Add chat history (last 10 messages to maintain context)
+                # Build conversation history as prompt
+                conversation_history = ""
                 if request.chat_history:
                     for msg in request.chat_history[-10:]:
-                        messages.append({
-                            "role": msg.role.value if hasattr(msg.role, 'value') else str(msg.role),
-                            "content": msg.content
-                        })
+                        role = msg.role.value if hasattr(msg.role, 'value') else str(msg.role)
+                        conversation_history += f"{role.capitalize()}: {msg.content}\n"
                 
-                # Add current user message
-                messages.append({"role": "user", "content": request.message})
+                # Build the full prompt with user's current message
+                user_prompt = f"{conversation_history}User: {request.message}\nAssistant:"
                 
-                stream_response = await rag_system.openai_client.chat.completions.create(
-                    model=model_to_use,
-                    messages=messages,
+                # Stream the response using Datapizza AI streaming
+                async for chunk in rag_system.openai_client.a_stream_invoke(
+                    prompt=user_prompt,
+                    system_prompt=system_prompt,
+                    model_name=model_to_use,
                     temperature=0.7,
-                    max_tokens=1500,
-                    stream=True
-                )
-                
-                # Stream the response
-                async for chunk in stream_response:
-                    if chunk.choices[0].delta.content:
-                        yield f"data: {json.dumps({'type': 'content', 'content': chunk.choices[0].delta.content})}\n\n"
+                    max_tokens=1500
+                ):
+                    if chunk.delta:
+                        yield f"data: {json.dumps({'type': 'content', 'content': chunk.delta})}\n\n"
                         await asyncio.sleep(0.001)
                 
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
@@ -1011,19 +1011,24 @@ Show me examples of the core functionality?
             # Add current user message
             messages.append({"role": "user", "content": request.message})
             
-            stream_response = await rag_system.openai_client.chat.completions.create(
-                model=request.model,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1500,
-                stream=True
-            )
+            # Build conversation history as prompt
+            conversation_prompt = ""
+            for msg in messages[1:]:  # Skip system prompt
+                role = msg['role']
+                conversation_prompt += f"{role.capitalize()}: {msg['content']}\n"
+            conversation_prompt += "Assistant:"
             
-            # Stream OpenAI response immediately while search happens in background
+            # Stream response using Datapizza AI
             response_chunks = []
-            async for chunk in stream_response:
-                if chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
+            async for chunk in rag_system.openai_client.a_stream_invoke(
+                prompt=conversation_prompt,
+                system_prompt=messages[0]['content'],  # First message is system prompt
+                model_name=request.model,
+                temperature=0.7,
+                max_tokens=1500
+            ):
+                if chunk.delta:
+                    content = chunk.delta
                     response_chunks.append(content)
                     yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
             

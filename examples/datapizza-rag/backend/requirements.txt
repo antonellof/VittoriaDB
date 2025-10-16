@@ -8,19 +8,9 @@ websockets>=12.0
 # VittoriaDB integration
 vittoriadb>=0.2.0
 
-# Datapizza AI - Modern AI framework with embeddings support
-# Install from GitHub until packages are published to PyPI
-# git+https://github.com/datapizza-labs/datapizza-ai.git@main#subdirectory=datapizza-ai-core
-# git+https://github.com/datapizza-labs/datapizza-ai.git@main#subdirectory=datapizza-ai-embedders
-# git+https://github.com/datapizza-labs/datapizza-ai.git@main#subdirectory=datapizza-ai-clients
-# For now, using direct OpenAI API compatible with datapizza patterns
-
-# LLM and AI
-openai>=1.3.0
-anthropic>=0.7.0
-sentence-transformers>=2.2.0
-torch>=2.0.0
-transformers>=4.30.0
+# Datapizza AI - Modern AI framework for LLM, embeddings, and RAG
+# https://datapizza.tech/en/ai-framework/
+datapizza-ai
 
 # Web research and scraping
 requests>=2.31.0

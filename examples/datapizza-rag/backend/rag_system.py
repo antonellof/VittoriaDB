@@ -14,11 +14,10 @@ import time
 import vittoriadb
 from vittoriadb.configure import Configure
 from vittoriadb.types import IndexType, DistanceMetric, ContentStorageConfig
-import openai
-from openai import AsyncOpenAI
 
-# Datapizza AI embeddings
+# Datapizza AI for embeddings and LLM streaming
 from datapizza_embedder import DatapizzaEmbedder, EmbedderConfig, get_embedder
+from datapizza.clients.openai import OpenAIClient
 
 # Import Pydantic models to avoid type conflicts
 from models import SearchResult as SearchResultModel
@@ -127,10 +126,14 @@ class RAGSystem:
         self.db = None
         self.collections = {}
         
-        # Initialize OpenAI client if API key provided
+        # Initialize Datapizza OpenAI client for LLM streaming
         self.openai_client = None
+        self.llm_model = os.getenv("LLM_MODEL", "gpt-4o-mini")
         if openai_api_key:
-            self.openai_client = AsyncOpenAI(api_key=openai_api_key)
+            self.openai_client = OpenAIClient(
+                api_key=openai_api_key,
+                model=self.llm_model
+            )
         
         # Initialize Datapizza embedder
         if embedder_config:
@@ -183,17 +186,30 @@ class RAGSystem:
         self._initialize_db()
     
     def _initialize_db(self):
-        """Initialize VittoriaDB connection and collections"""
-        try:
-            # Connect to VittoriaDB
-            self.db = vittoriadb.connect(
-                url=self.vittoriadb_url,
-                auto_start=True  # Auto-start server if not running
-            )
-            logger.info(f"✅ Connected to VittoriaDB at {self.vittoriadb_url}")
-            
-            # Create collections with HNSW indexing and content storage for better performance
-            for name, config in self.collection_configs.items():
+        """Initialize VittoriaDB connection with retry logic"""
+        max_retries = 30
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"🔌 Connecting to VittoriaDB at {self.vittoriadb_url} (attempt {attempt + 1}/{max_retries})")
+                # Connect to VittoriaDB
+                self.db = vittoriadb.connect(
+                    url=self.vittoriadb_url,
+                    auto_start=False  # Don't auto-start in Docker
+                )
+                logger.info(f"✅ Connected to VittoriaDB at {self.vittoriadb_url}")
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"⚠️  VittoriaDB not ready, retrying in {retry_delay}s... ({e})")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"❌ Failed to connect to VittoriaDB after {max_retries} attempts")
+                    raise
+        
+        # Create collections with HNSW indexing and content storage for better performance
+        for name, config in self.collection_configs.items():
                 try:
                     # Create collection with datapizza embeddings
                     from vittoriadb.configure import Configure
@@ -269,10 +285,6 @@ class RAGSystem:
                             logger.error(f"❌ Failed to handle existing collection '{name}': {get_error}")
                     else:
                         logger.error(f"❌ Failed to create collection '{name}': {e}")
-                        
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize VittoriaDB: {e}")
-            raise
     
     async def add_document(self, 
                           content: str, 
@@ -773,19 +785,16 @@ class RAGSystem:
         """
         
         try:
-            # Generate response using OpenAI (use GPT-4o for best performance)
-                
-            response = await self.openai_client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_query}
-                ],
+            # Generate response using Datapizza AI OpenAI client (non-streaming)
+            response = await self.openai_client.a_invoke(
+                prompt=user_query,
+                system_prompt=system_prompt,
+                model_name=model,
                 temperature=0.7,
-                max_tokens=1500  # Increased for GPT-4
+                max_tokens=1500
             )
                 
-            return response.choices[0].message.content
+            return response.content
             
         except Exception as e:
             logger.error(f"❌ Failed to generate response: {e}")
@@ -1197,5 +1206,9 @@ def get_rag_system() -> RAGSystem:
     global _rag_system
     if _rag_system is None:
         openai_key = os.getenv('OPENAI_API_KEY')
-        _rag_system = RAGSystem(openai_api_key=openai_key)
+        vittoriadb_url = os.getenv('VITTORIADB_URL', 'http://localhost:8080')
+        _rag_system = RAGSystem(
+            vittoriadb_url=vittoriadb_url,
+            openai_api_key=openai_key
+        )
     return _rag_system

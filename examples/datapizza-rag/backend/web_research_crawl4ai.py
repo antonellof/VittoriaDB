@@ -19,8 +19,8 @@ from ddgs import DDGS
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.extraction_strategy import LLMExtractionStrategy, CosineStrategy
 import httpx
-import openai
 import json
+from datapizza.clients.openai import OpenAIClient
 
 logger = logging.getLogger(__name__)
 
@@ -277,8 +277,8 @@ class AdvancedWebResearcher:
                 logger.warning("No OpenAI API key found, skipping AI optimization")
                 return query, 'us-en'
             
-            # Create OpenAI client
-            client = openai.AsyncOpenAI(api_key=api_key)
+            # Create Datapizza OpenAI client
+            client = OpenAIClient(api_key=api_key, model="gpt-4o-mini")
             
             # Enhanced system prompt with language detection
             system_prompt = """You are a search query optimization expert with language detection capabilities. Your job is to:
@@ -323,19 +323,16 @@ Return ONLY in this exact JSON format:
 
             user_prompt = f"Optimize this search query and detect its language: {query}"
             
-            # Make API call
-            response = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+            # Make API call using Datapizza AI
+            response = await client.a_invoke(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                model_name="gpt-4o-mini",
                 max_tokens=150,
-                temperature=0.2,
-                timeout=10.0
+                temperature=0.2
             )
             
-            result_text = response.choices[0].message.content.strip()
+            result_text = response.content.strip()
             
             # Parse JSON response
             try:

@@ -977,7 +977,24 @@ export default function Home() {
               <div>
                 <h1 className="font-semibold">Your Personal Assistant</h1>
                 <p className="text-xs text-muted-foreground">
-                  Powered by VittoriaDB • Connected to your knowledge base
+                  Powered by{' '}
+                  <a 
+                    href="https://datapizza.tech/en/ai-framework/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="hover:text-primary transition-colors font-medium"
+                  >
+                    Datapizza AI
+                  </a>
+                  {' '}+{' '}
+                  <a 
+                    href="https://github.com/antonellof/VittoriaDB" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="hover:text-primary transition-colors font-medium"
+                  >
+                    VittoriaDB
+                  </a>
                 </p>
               </div>
             </div>
@@ -1231,10 +1248,32 @@ export default function Home() {
                         <span className="text-2xl text-white font-bold">V</span>
                       </div>
                       <h2 className="text-2xl font-bold mb-2">Welcome to Your Personal Assistant</h2>
-                      <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                      <p className="text-muted-foreground mb-4 max-w-md mx-auto">
                         I can help you search through your documents, research topics on the web, 
                         and analyze code from your indexed repositories.
                       </p>
+                      <div className="flex items-center justify-center gap-2 mb-8">
+                        <a
+                          href="https://datapizza.tech/en/ai-framework/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-medium hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                        >
+                          <span>⚡</span>
+                          <span>Datapizza AI</span>
+                          <ExternalLink size={12} />
+                        </a>
+                        <a
+                          href="https://github.com/antonellof/VittoriaDB"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+                        >
+                          <Database size={12} />
+                          <span>VittoriaDB</span>
+                          <ExternalLink size={12} />
+                        </a>
+                      </div>
                       
                       {/* Suggestions in main area */}
                       <div className="mt-8 max-w-2xl mx-auto">

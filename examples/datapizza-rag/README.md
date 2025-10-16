@@ -1,81 +1,99 @@
 # VittoriaDB RAG Assistant with Datapizza AI
 
-A complete, production-ready RAG (Retrieval-Augmented Generation) system powered by **[Datapizza AI](https://datapizza.ai)** embeddings and **VittoriaDB** vector database.
+A complete, production-ready RAG (Retrieval-Augmented Generation) system powered by **[Datapizza AI](https://datapizza.tech/en/ai-framework/)** for embeddings and LLM interactions, and **VittoriaDB** as the vector database.
 
 ## ✨ What's Inside
 
-- **🧠 Datapizza AI Integration**: Modern embeddings API supporting OpenAI and local Ollama
-- **⚡ VittoriaDB**: High-performance vector database for semantic search
-- **💬 Chat Interface**: Beautiful Next.js UI with real-time streaming
-- **📁 Document Processing**: Upload PDFs, DOCX, TXT, MD, HTML files
-- **🌐 Web Research**: Live web search with automatic knowledge storage
+- **🧠 Datapizza AI Integration**: Modern AI framework for embeddings and LLM streaming (OpenAI & Ollama)
+- **⚡ VittoriaDB**: High-performance HNSW vector database for semantic search
+- **💬 Chat Interface**: Beautiful Next.js UI with real-time streaming responses
+- **📁 Document Processing**: Upload and index PDFs, DOCX, TXT, MD, HTML files
+- **🌐 Web Research**: Live web search with automatic knowledge storage using Crawl4AI
 - **💻 GitHub Indexing**: Index and search through code repositories
+- **🐳 Docker Support**: One-command deployment with Docker Compose
 
 ## 🏗️ Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                     Full Stack                           │
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────┐    ┌──────────────┐    ┌───────────┐ │
-│  │   Frontend   │───▶│   Backend    │───▶│VittoriaDB │ │
-│  │   Next.js    │    │   FastAPI    │    │ Vector DB │ │
-│  │  Port: 3000  │    │  Port: 8501  │    │Port: 8080 │ │
-│  └──────────────┘    └──────┬───────┘    └───────────┘ │
-│                              │                          │
-│                      ┌───────▼────────┐                 │
-│                      │ Datapizza AI   │                 │
-│                      │   Embeddings   │                 │
-│                      └───────┬────────┘                 │
-│                   ┌──────────┴──────────┐               │
-│            ┌──────▼──────┐      ┌───────▼──────┐       │
-│            │   OpenAI    │      │   Ollama     │       │
-│            │  (Cloud)    │      │  (Local)     │       │
-│            └─────────────┘      └──────────────┘       │
-└──────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│                    Full Stack RAG                         │
+├───────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌──────────────┐    ┌──────────────┐    ┌───────────┐  │
+│  │   Frontend   │───▶│   Backend    │───▶│VittoriaDB │  │
+│  │   Next.js    │    │   FastAPI    │    │  HNSW DB  │  │
+│  │  Port: 3000  │◀───│  Port: 8501  │◀───│Port: 8080 │  │
+│  └──────────────┘    └──────┬───────┘    └───────────┘  │
+│                              │                           │
+│                      ┌───────▼────────┐                  │
+│                      │ Datapizza AI   │                  │
+│                      │ Framework      │                  │
+│                      └───────┬────────┘                  │
+│                   ┌──────────┴──────────┐                │
+│                   │                     │                │
+│         ┌─────────▼────────┐   ┌────────▼────────┐      │
+│         │   Embeddings     │   │  LLM Streaming  │      │
+│         │  OpenAIEmbedder  │   │  OpenAIClient   │      │
+│         └─────────┬────────┘   └────────┬────────┘      │
+│         ┌─────────┴──────────────────────┴─────┐        │
+│         │                                      │        │
+│  ┌──────▼──────┐              ┌──────▼──────┐ │        │
+│  │   OpenAI    │              │   Ollama    │ │        │
+│  │  (Cloud)    │              │  (Local)    │ │        │
+│  └─────────────┘              └─────────────┘ │        │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ## 🚀 Quick Start
 
-### 🐳 Docker (Easiest - One Command!)
+### 🐳 Docker (Recommended - One Command!)
 
-The fastest way to run the complete stack:
+The fastest and easiest way to run the complete stack:
 
 ```bash
 cd examples/datapizza-rag
 
-# 1. Copy environment file and configure
+# 1. Copy environment file and add your OpenAI API key
 cp env.docker.example .env
-# Edit .env and set your OPENAI_API_KEY
+nano .env  # Set OPENAI_API_KEY=sk-your-key-here
 
-# 2. Start everything with one command
+# 2. Start everything with one command (builds all services)
+chmod +x docker-start.sh
 ./docker-start.sh
+
+# Or use docker-compose directly:
+docker-compose up -d
 ```
 
-Services will be available at:
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8501
-- **VittoriaDB**: http://localhost:8080
+**Wait for all services to be healthy** (~1-2 minutes), then access:
+- ✨ **Frontend UI**: http://localhost:3000
+- 🔧 **Backend API Docs**: http://localhost:8501/docs
+- 🗄️ **VittoriaDB API**: http://localhost:8080/docs
 
 **Useful Docker Commands:**
 ```bash
-# View logs
+# View logs in real-time
 docker-compose logs -f
 
-# Stop services
+# View specific service logs
+docker-compose logs -f backend
+
+# Check service health
+docker-compose ps
+
+# Stop services (data preserved)
 docker-compose down
 
-# Restart services
-docker-compose restart
+# Restart a single service
+docker-compose restart backend
 
-# Remove everything (including data)
+# Remove everything including data
 docker-compose down -v
 ```
 
 ---
 
-### 💻 Manual Installation
+### 💻 Manual Installation (Advanced)
 
 ### Prerequisites
 
@@ -271,9 +289,21 @@ The Docker Compose setup includes:
 
 ## 📚 Learn More
 
-- **Datapizza AI**: [https://datapizza.ai](https://datapizza.ai)
-- **Datapizza RAG Guide**: [https://docs.datapizza.ai/Guides/RAG/rag/](https://docs.datapizza.ai/Guides/RAG/rag/)
-- **VittoriaDB**: High-performance vector database for AI applications
+- **Datapizza AI Framework**: [https://datapizza.tech/en/ai-framework/](https://datapizza.tech/en/ai-framework/)
+- **Datapizza AI Documentation**: [https://docs.datapizza.ai/](https://docs.datapizza.ai/)
+- **Datapizza RAG Guide**: [https://docs.datapizza.ai/0.0.2/Guides/RAG/rag/](https://docs.datapizza.ai/0.0.2/Guides/RAG/rag/)
+- **Datapizza Streaming Guide**: [https://docs.datapizza.ai/0.0.2/Guides/Clients/streaming/](https://docs.datapizza.ai/0.0.2/Guides/Clients/streaming/)
+- **VittoriaDB**: [https://github.com/antonellof/VittoriaDB](https://github.com/antonellof/VittoriaDB)
+
+## 🎯 What Makes This Special
+
+This example demonstrates **production-ready RAG patterns** using:
+- ✅ **Datapizza AI** for unified embeddings & LLM streaming
+- ✅ **VittoriaDB** HNSW for fast similarity search
+- ✅ **Docker Compose** for one-command deployment
+- ✅ **Client & Server-side embeddings** support
+- ✅ **Streaming responses** with SSE
+- ✅ **Multiple collections** for organized knowledge
 
 ## 🤝 Contributing
 
@@ -285,4 +315,4 @@ This project is part of VittoriaDB and follows the same license.
 
 ---
 
-**Built with ❤️ using Datapizza AI and VittoriaDB**
+**Built with ⚡ [Datapizza AI](https://datapizza.tech/en/ai-framework/) + 🗄️ [VittoriaDB](https://github.com/antonellof/VittoriaDB)**

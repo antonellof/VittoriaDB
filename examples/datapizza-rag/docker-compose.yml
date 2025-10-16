@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   # VittoriaDB Vector Database
   vittoriadb:
     build:
       context: ../../
       dockerfile: Dockerfile
-    container_name: datapizza-vittoriadb
+    container_name: vittoriadb-rag-db
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -27,14 +25,15 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: datapizza-backend
+    container_name: vittoriadb-rag-backend
     restart: unless-stopped
     ports:
       - "8501:8501"
     volumes:
-      - ./backend/uploads:/app/uploads
-      - ./backend/logs:/app/logs
+      - ./backend:/app  # Mount source for hot reload
       - backend-data:/app/data
+      - backend-uploads:/app/uploads
+      - backend-logs:/app/logs
     environment:
       # VittoriaDB Configuration
       - VITTORIADB_URL=http://vittoriadb:8080
@@ -76,13 +75,17 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: datapizza-frontend
+    container_name: vittoriadb-rag-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      - ./frontend:/app  # Mount source for hot reload
+      - /app/node_modules  # Prevent overwriting node_modules
+      - /app/.next  # Prevent overwriting .next
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8501
-      - NODE_ENV=production
+      - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
     depends_on:
       backend:
@@ -100,6 +103,10 @@ volumes:
   vittoriadb-data:
     driver: local
   backend-data:
+    driver: local
+  backend-uploads:
+    driver: local
+  backend-logs:
     driver: local
 
 networks:

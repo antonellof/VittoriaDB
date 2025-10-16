@@ -16,7 +16,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { ChatStatus, FileUIPart } from "ai";
+import type { FilePart } from "ai";
+
+// Define ChatStatus type locally since it's not exported from 'ai' package in this version
+type ChatStatus = "streaming" | "awaiting_message" | "in_progress";
+type FileUIPart = FilePart & { name: string; url?: string };
 import {
   ImageIcon,
   Loader2Icon,
