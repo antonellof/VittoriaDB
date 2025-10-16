@@ -1231,10 +1231,15 @@ export default function Home() {
                         <span className="text-2xl text-white font-bold">V</span>
                       </div>
                       <h2 className="text-2xl font-bold mb-2">Welcome to Your Personal Assistant</h2>
-                      <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                      <p className="text-muted-foreground mb-4 max-w-md mx-auto">
                         I can help you search through your documents, research topics on the web, 
                         and analyze code from your indexed repositories.
                       </p>
+                      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mb-4">
+                        <span className="px-2 py-1 bg-muted/50 rounded-md font-medium">Datapizza AI RAG</span>
+                        <span>•</span>
+                        <span className="px-2 py-1 bg-muted/50 rounded-md font-medium">VittoriaDB</span>
+                      </div>
                       
                       {/* Suggestions in main area */}
                       <div className="mt-8 max-w-2xl mx-auto">
