@@ -176,36 +176,16 @@ export function DocumentsViewer({
     setDeletingDocs(prev => new Set(prev).add(doc.id))
 
     try {
-      // Delete all chunks belonging to this document
-      let deletedCount = 0
-      const errors: string[] = []
-
-      for (const chunk of doc.chunks) {
-        try {
-          console.log(`🗑️ Deleting chunk: ${chunk.id}`)
-          const result = await apiClient.deleteDocumentById(collectionName, chunk.id)
-          
-          if (result.success) {
-            deletedCount++
-          } else {
-            errors.push(`Failed to delete chunk ${chunk.id}`)
-          }
-        } catch (error: any) {
-          console.error(`Failed to delete chunk ${chunk.id}:`, error)
-          errors.push(`Error deleting chunk ${chunk.id}: ${error.message}`)
-        }
-      }
-
-      if (deletedCount > 0) {
-        toast.success(`✅ Deleted ${deletedCount} chunks from "${getDocumentTitle(doc)}"`)
-        
+      // Delete the entire document by its document_id (backend handles all chunks)
+      console.log(`🗑️ Deleting document: ${doc.id} (${getDocumentTitle(doc)})`)
+      const result = await apiClient.deleteDocumentById(collectionName, doc.id)
+      
+      if (result.success) {
+        toast.success(`✅ Successfully deleted "${getDocumentTitle(doc)}" (${doc.totalChunks} chunks)`)
         // Refresh the documents list
         await fetchDocuments()
-      }
-
-      if (errors.length > 0) {
-        console.error('Some deletions failed:', errors)
-        toast.error(`⚠️ ${errors.length} chunks failed to delete`)
+      } else {
+        toast.error(`Failed to delete document: ${result.message || 'Unknown error'}`)
       }
 
     } catch (error: any) {
