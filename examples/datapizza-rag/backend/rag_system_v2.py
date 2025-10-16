@@ -440,6 +440,11 @@ class RAGSystemV2:
             # Get all chunks for this document
             original_docs = await self.get_original_documents(collection_name)
             
+            # Debug: Log available document IDs
+            available_ids = [doc['document_id'] for doc in original_docs]
+            logger.info(f"🔍 Looking for document_id='{document_id}' in collection '{collection_name}'")
+            logger.info(f"🔍 Available document_ids: {available_ids}")
+            
             # Find the document
             target_doc = None
             for doc in original_docs:
@@ -449,9 +454,10 @@ class RAGSystemV2:
             
             if not target_doc:
                 logger.warning(f"⚠️ Document '{document_id}' not found in '{collection_name}'")
+                logger.warning(f"⚠️ Available documents: {[{'id': d['document_id'], 'file': d['filename']} for d in original_docs]}")
                 return {
                     'success': False,
-                    'message': 'Document not found',
+                    'message': f"Document not found. Available IDs: {', '.join(available_ids)}",
                     'deleted_count': 0
                 }
             

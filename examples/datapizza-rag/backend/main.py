@@ -2357,16 +2357,19 @@ async def delete_document_by_id(collection_name: str, document_id: str):
         if result['success']:
             logger.info("Document deletion completed", 
                        collection=collection_name,
-                       document_id=document_id)
+                       document_id=document_id,
+                       deleted_count=result.get('deleted_count', 0))
             return {
                 "success": True,
                 "message": f"Successfully deleted document {document_id}",
                 "document_id": document_id,
-                "collection": collection_name
+                "collection": collection_name,
+                "deleted_count": result.get('deleted_count', 0)
             }
         else:
-            logger.error("Document deletion failed", error=result['error'])
-            raise HTTPException(status_code=500, detail=result['error'])
+            error_msg = result.get('message', 'Unknown error')
+            logger.error("Document deletion failed", error=error_msg)
+            raise HTTPException(status_code=404, detail=error_msg)
             
     except HTTPException:
         raise
