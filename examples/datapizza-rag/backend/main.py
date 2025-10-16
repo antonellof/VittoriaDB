@@ -618,11 +618,36 @@ async def advanced_rag_stream(request: ChatRequest):
                     min_score = max(0.1, min_score - 0.2)  # Lower threshold
                     logger.info(f"🔍 Knowledge base overview query detected in advanced RAG - using limit={search_limit}, min_score={min_score}")
                 
-                db_search_results = await rag_engine.search(
+                # Use rag_system.search_knowledge_base to respect search_collections parameter
+                db_search_results_raw = await rag_system.search_knowledge_base(
                     query=request.message,
+                    collections=request.search_collections,
                     limit=search_limit,
                     min_score=min_score
                 )
+                
+                # Convert to rag_engine format for compatibility
+                from rag_engine import RetrievalResult, DocumentChunk
+                db_search_results = []
+                for i, result in enumerate(db_search_results_raw):
+                    # Create a DocumentChunk object matching the correct constructor
+                    chunk = DocumentChunk(
+                        id=f"chunk_{i}",
+                        content=result.content,
+                        document_id=result.metadata.get('document_id', 'unknown'),
+                        document_title=result.metadata.get('title', result.metadata.get('document_title', 'Unknown')),
+                        chunk_index=0,
+                        chunk_size=len(result.content),
+                        start_char=0,
+                        end_char=len(result.content),
+                        metadata=result.metadata
+                    )
+                    retrieval_result = RetrievalResult(
+                        chunk=chunk,
+                        score=result.score,
+                        rank=i + 1
+                    )
+                    db_search_results.append(retrieval_result)
                 
                 # Update knowledge base search step
                 kb_search_step['status'] = 'complete'
