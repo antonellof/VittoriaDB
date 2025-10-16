@@ -445,11 +445,20 @@ class RAGSystemV2:
             logger.info(f"🔍 Looking for document_id='{document_id}' in collection '{collection_name}'")
             logger.info(f"🔍 Available document_ids: {available_ids}")
             
-            # Find the document
+            # Find the document - support both document_id and chunk_id (frontend compatibility)
             target_doc = None
             for doc in original_docs:
+                # Check if it matches the document_id
                 if doc['document_id'] == document_id:
                     target_doc = doc
+                    break
+                # Fallback: Check if it matches any chunk_id (for frontend compatibility)
+                for chunk in doc['chunks']:
+                    if chunk['chunk_id'] == document_id:
+                        target_doc = doc
+                        logger.info(f"🔄 Document found by chunk_id '{document_id}', using document_id '{doc['document_id']}'")
+                        break
+                if target_doc:
                     break
             
             if not target_doc:
