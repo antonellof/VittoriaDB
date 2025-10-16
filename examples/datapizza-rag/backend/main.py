@@ -21,7 +21,7 @@ import structlog
 
 # Import our modules
 from models import *
-from rag_system import get_rag_system, SearchResult
+from rag_system_v2 import get_rag_system, SearchResult  # V2: Using Datapizza AI pipelines
 from file_processor import get_file_processor
 from web_research import get_web_researcher
 from web_research_crawl4ai import AdvancedWebResearcher, research_with_crawl4ai
