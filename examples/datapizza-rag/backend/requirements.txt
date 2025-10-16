@@ -21,6 +21,7 @@ httpx[http2]>=0.25.0
 crawl4ai>=0.7.4
 torch>=2.0.0  # Required by Crawl4AI for content extraction
 transformers>=4.30.0  # Required by Crawl4AI for NLP tasks
+scikit-learn>=1.3.0  # Required by Crawl4AI for document similarity
 
 # Document processing
 pypdf2>=3.0.0
