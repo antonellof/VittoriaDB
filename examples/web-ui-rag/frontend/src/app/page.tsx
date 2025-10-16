@@ -975,10 +975,10 @@ export default function Home() {
                 <span className="text-white font-bold">V</span>
               </div>
               <div>
-                <h1 className="font-semibold">Your Personal Assistant</h1>
-                <p className="text-xs text-muted-foreground">
-                  Powered by VittoriaDB • Connected to your knowledge base
-                </p>
+                  <h1 className="font-semibold">Your Personal Assistant</h1>
+                  <p className="text-xs text-muted-foreground">
+                    Powered by Datapizza AI + VittoriaDB
+                  </p>
               </div>
             </div>
           </div>
