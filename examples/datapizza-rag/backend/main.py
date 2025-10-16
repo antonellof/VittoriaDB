@@ -730,9 +730,9 @@ Content: {result.content[:600]}...
                 
                 # Stream the response using Datapizza AI streaming
                 async for chunk in rag_system.openai_client.a_stream_invoke(
-                    prompt=user_prompt,
-                    system_prompt=system_prompt,
-                    model_name=model_to_use,
+                    input=user_prompt,
+                    system=system_prompt,
+                    model=model_to_use,
                     temperature=0.7,
                     max_tokens=1500
                 ):
@@ -1021,9 +1021,9 @@ Show me examples of the core functionality?
             # Stream response using Datapizza AI
             response_chunks = []
             async for chunk in rag_system.openai_client.a_stream_invoke(
-                prompt=conversation_prompt,
-                system_prompt=messages[0]['content'],  # First message is system prompt
-                model_name=request.model,
+                input=conversation_prompt,
+                system=messages[0]['content'],  # First message is system prompt
+                model=request.model,
                 temperature=0.7,
                 max_tokens=1500
             ):

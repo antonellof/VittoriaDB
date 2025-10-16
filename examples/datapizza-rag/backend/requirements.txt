@@ -19,6 +19,7 @@ ddgs>=3.9.0
 httpx
 httpx[http2]>=0.25.0
 crawl4ai>=0.7.4
+torch>=2.0.0  # Required by Crawl4AI for content extraction
 
 # Document processing
 pypdf2>=3.0.0

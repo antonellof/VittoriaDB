@@ -787,9 +787,9 @@ class RAGSystem:
         try:
             # Generate response using Datapizza AI OpenAI client (non-streaming)
             response = await self.openai_client.a_invoke(
-                prompt=user_query,
-                system_prompt=system_prompt,
-                model_name=model,
+                input=user_query,
+                system=system_prompt,
+                model=model,
                 temperature=0.7,
                 max_tokens=1500
             )

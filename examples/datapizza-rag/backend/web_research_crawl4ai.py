@@ -325,9 +325,9 @@ Return ONLY in this exact JSON format:
             
             # Make API call using Datapizza AI
             response = await client.a_invoke(
-                prompt=user_prompt,
-                system_prompt=system_prompt,
-                model_name="gpt-4o-mini",
+                input=user_prompt,
+                system=system_prompt,
+                model="gpt-4o-mini",
                 max_tokens=150,
                 temperature=0.2
             )
