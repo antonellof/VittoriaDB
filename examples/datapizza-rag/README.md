@@ -38,6 +38,45 @@ A complete, production-ready RAG (Retrieval-Augmented Generation) system powered
 
 ## 🚀 Quick Start
 
+### 🐳 Docker (Easiest - One Command!)
+
+The fastest way to run the complete stack:
+
+```bash
+cd examples/datapizza-rag
+
+# 1. Copy environment file and configure
+cp env.docker.example .env
+# Edit .env and set your OPENAI_API_KEY
+
+# 2. Start everything with one command
+./docker-start.sh
+```
+
+Services will be available at:
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8501
+- **VittoriaDB**: http://localhost:8080
+
+**Useful Docker Commands:**
+```bash
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Restart services
+docker-compose restart
+
+# Remove everything (including data)
+docker-compose down -v
+```
+
+---
+
+### 💻 Manual Installation
+
 ### Prerequisites
 
 - **Go 1.21+** (to build VittoriaDB)
@@ -210,18 +249,25 @@ The system uses 4 main collections:
 3. **github_code** - Indexed code repositories
 4. **chat_history** - Conversation history
 
-## 🐳 Docker Support
+## 🐳 Docker Architecture
 
-```bash
-# Build and run with Docker Compose
-cd examples/datapizza-rag
-docker-compose up -d
-```
+The Docker Compose setup includes:
 
-Services:
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8501`
-- VittoriaDB: `http://localhost:8080`
+**Services:**
+1. **VittoriaDB** - Built from source (Golang)
+2. **Backend** - FastAPI with Datapizza AI
+3. **Frontend** - Next.js production build
+
+**Volumes:**
+- `vittoriadb-data` - Persistent vector storage
+- `backend-data` - Uploaded files and logs
+
+**Network:**
+- All services on `datapizza-network` bridge
+
+**Health Checks:**
+- All services have health checks for reliable startup
+- Automatic dependency ordering (VittoriaDB → Backend → Frontend)
 
 ## 📚 Learn More
 

@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  # VittoriaDB Vector Database
+  vittoriadb:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+    container_name: datapizza-vittoriadb
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - vittoriadb-data:/data
+    command: ["./vittoriadb", "run", "--host", "0.0.0.0", "--port", "8080", "--data-dir", "/data"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - datapizza-network
+
+  # FastAPI Backend with Datapizza AI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: datapizza-backend
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/logs:/app/logs
+      - backend-data:/app/data
+    environment:
+      # VittoriaDB Configuration
+      - VITTORIADB_URL=http://vittoriadb:8080
+      
+      # Datapizza AI Embeddings Configuration
+      # Option 1: OpenAI (Cloud) - Recommended for production
+      - EMBEDDER_PROVIDER=${EMBEDDER_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_EMBED_MODEL=${OPENAI_EMBED_MODEL:-text-embedding-ada-002}
+      - OPENAI_EMBED_DIMENSIONS=${OPENAI_EMBED_DIMENSIONS:-1536}
+      
+      # Option 2: Ollama (Local) - Uncomment to use
+      # - EMBEDDER_PROVIDER=ollama
+      # - OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
+      # - OLLAMA_EMBED_MODEL=nomic-embed-text
+      # - OLLAMA_EMBED_DIMENSIONS=768
+      
+      # LLM Configuration (for response generation)
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
+      
+      # Server Configuration
+      - PORT=8501
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      vittoriadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - datapizza-network
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: datapizza-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8501
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - datapizza-network
+
+volumes:
+  vittoriadb-data:
+    driver: local
+  backend-data:
+    driver: local
+
+networks:
+  datapizza-network:
+    driver: bridge
+
