@@ -20,6 +20,9 @@ from openai import AsyncOpenAI
 # Datapizza AI embeddings
 from datapizza_embedder import DatapizzaEmbedder, EmbedderConfig, get_embedder
 
+# Import Pydantic models to avoid type conflicts
+from models import SearchResult as SearchResultModel
+
 # Simple embedding service using HTTP requests (no complex dependencies)
 import httpx
 import requests
@@ -30,13 +33,8 @@ import re
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@dataclass
-class SearchResult:
-    """Search result from vector database"""
-    content: str
-    metadata: Dict[str, Any]
-    score: float
-    source: str
+# Use Pydantic SearchResult for consistency with FastAPI
+SearchResult = SearchResultModel
 
 def chunk_text(text: str, max_tokens: int = 6000, overlap: int = 200) -> List[str]:
     """

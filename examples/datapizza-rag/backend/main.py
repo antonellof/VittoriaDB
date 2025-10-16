@@ -442,16 +442,17 @@ async def chat(request: ChatRequest):
             search_collections=request.search_collections
         )
         
-        # Convert search results
-        sources = [
-            SearchResult(
-                content=result.content,
-                metadata=result.metadata,
-                score=result.score,
-                source=result.source
+        # Convert search results to Pydantic models
+        sources = []
+        for result in search_results:
+            sources.append(
+                SearchResult(
+                    content=str(result.content),
+                    metadata=dict(result.metadata) if result.metadata else {},
+                    score=float(result.score),
+                    source=str(result.source)
+                )
             )
-            for result in search_results
-        ]
         
         processing_time = time.time() - start_time
         
