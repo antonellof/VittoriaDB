@@ -424,14 +424,61 @@ class RAGSystemV2:
             return []
     
     async def delete_document(self, collection_name: str, doc_id: str):
-        """Delete a document from a collection"""
+        """Delete a single chunk from a collection by its chunk ID"""
         try:
             # VittoriaDB delete implementation
             collection = self.vectorstore.db.get_collection(collection_name)
             collection.delete(doc_id)
-            logger.info(f"✅ Deleted document '{doc_id}' from '{collection_name}'")
+            logger.info(f"✅ Deleted chunk '{doc_id}' from '{collection_name}'")
         except Exception as e:
-            logger.error(f"❌ Failed to delete document: {e}")
+            logger.error(f"❌ Failed to delete chunk: {e}")
+            raise
+    
+    async def delete_document_by_id(self, document_id: str, collection_name: str):
+        """Delete a document and all its chunks by document_id"""
+        try:
+            # Get all chunks for this document
+            original_docs = await self.get_original_documents(collection_name)
+            
+            # Find the document
+            target_doc = None
+            for doc in original_docs:
+                if doc['document_id'] == document_id:
+                    target_doc = doc
+                    break
+            
+            if not target_doc:
+                logger.warning(f"⚠️ Document '{document_id}' not found in '{collection_name}'")
+                return {
+                    'success': False,
+                    'message': 'Document not found',
+                    'deleted_count': 0
+                }
+            
+            # Delete all chunks
+            deleted_count = 0
+            failed_chunks = []
+            
+            for chunk in target_doc['chunks']:
+                try:
+                    await self.delete_document(collection_name, chunk['chunk_id'])
+                    deleted_count += 1
+                except Exception as e:
+                    logger.error(f"❌ Failed to delete chunk {chunk['chunk_id']}: {e}")
+                    failed_chunks.append(chunk['chunk_id'])
+            
+            logger.info(f"✅ Deleted document '{document_id}': {deleted_count} chunks, {len(failed_chunks)} failed")
+            
+            return {
+                'success': len(failed_chunks) == 0,
+                'message': f"Deleted {deleted_count} chunks" + (f", {len(failed_chunks)} failed" if failed_chunks else ""),
+                'deleted_count': deleted_count,
+                'failed_count': len(failed_chunks),
+                'failed_chunks': failed_chunks
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to delete document by ID: {e}")
             raise
     
     def close(self):
