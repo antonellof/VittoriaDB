@@ -1489,6 +1489,7 @@ async def process_file_background(file_content: bytes, filename: str, document_i
                 'document_title': processed_doc.title  # Also add as document_title for compatibility
             }
             documents.append({
+                'id': chunk.id,  # Use the chunk's unique ID
                 'content': chunk.content,
                 'metadata': chunk_metadata
             })
