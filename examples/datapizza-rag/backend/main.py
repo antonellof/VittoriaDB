@@ -708,7 +708,7 @@ Content: {result.content[:600]}...
                 # Stream LLM response with combined context
                 yield f"data: {json.dumps({'type': 'llm_start', 'message': 'Generating response with fresh web data...'})}\n\n"
                 
-                if not rag_engine.openai_client:
+                if not rag_system.openai_client:
                     yield f"data: {json.dumps({'type': 'error', 'message': 'OpenAI not configured'})}\n\n"
                     return
                 
@@ -726,7 +726,7 @@ Content: {result.content[:600]}...
                 # Add current user message
                 messages.append({"role": "user", "content": request.message})
                 
-                stream_response = await rag_engine.openai_client.chat.completions.create(
+                stream_response = await rag_system.openai_client.chat.completions.create(
                     model=model_to_use,
                     messages=messages,
                     temperature=0.7,
