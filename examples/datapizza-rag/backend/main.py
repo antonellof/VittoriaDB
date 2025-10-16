@@ -22,7 +22,6 @@ import structlog
 # Import our modules
 from models import *
 from rag_system import get_rag_system, SearchResult
-from rag_engine import VittoriaRAGEngine
 from file_processor import get_file_processor
 from web_research import get_web_researcher
 from web_research_crawl4ai import AdvancedWebResearcher, research_with_crawl4ai
@@ -96,7 +95,6 @@ logger = structlog.get_logger()
 
 # Global instances
 rag_system = None
-rag_engine = None
 file_processor = None
 web_researcher = None
 advanced_web_researcher = None
@@ -145,17 +143,6 @@ async def lifespan(app: FastAPI):
     # Initialize components
     try:
         rag_system = get_rag_system()
-        
-        # Initialize new RAG engine
-        rag_engine = VittoriaRAGEngine(
-            vittoriadb_url="http://localhost:8080",
-            collection_name="advanced_rag_kb",
-            openai_api_key=os.getenv('OPENAI_API_KEY'),
-            use_ollama=os.getenv('EMBEDDER_PROVIDER', 'openai').lower() == 'ollama'
-        )
-        await rag_engine.initialize()
-        logger.info("✅ Advanced RAG engine initialized")
-        
         file_processor = get_file_processor()
         web_researcher = get_web_researcher()
         advanced_web_researcher = AdvancedWebResearcher(max_results=3, max_content_length=2000)
@@ -173,8 +160,6 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Shutting down VittoriaDB RAG API")
     if rag_system:
         rag_system.close()
-    if rag_engine:
-        rag_engine.close()
 
 # Create FastAPI app
 app = FastAPI(
@@ -370,14 +355,7 @@ async def get_collection_stats():
         raise HTTPException(status_code=500, detail=f"Failed to get collection stats: {str(e)}")
 
 # System statistics endpoint
-@app.get("/rag/stats")
-async def get_rag_stats():
-    """Get advanced RAG engine statistics"""
-    try:
-        return rag_engine.get_stats()
-    except Exception as e:
-        logger.error("Failed to get RAG stats", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+# Removed /rag/stats endpoint - stats are available via /stats endpoint
 
 @app.get("/stats", response_model=SystemStats)
 async def get_system_stats():
@@ -626,28 +604,8 @@ async def advanced_rag_stream(request: ChatRequest):
                     min_score=min_score
                 )
                 
-                # Convert to rag_engine format for compatibility
-                from rag_engine import RetrievalResult, DocumentChunk
-                db_search_results = []
-                for i, result in enumerate(db_search_results_raw):
-                    # Create a DocumentChunk object matching the correct constructor
-                    chunk = DocumentChunk(
-                        id=f"chunk_{i}",
-                        content=result.content,
-                        document_id=result.metadata.get('document_id', 'unknown'),
-                        document_title=result.metadata.get('title', result.metadata.get('document_title', 'Unknown')),
-                        chunk_index=0,
-                        chunk_size=len(result.content),
-                        start_char=0,
-                        end_char=len(result.content),
-                        metadata=result.metadata
-                    )
-                    retrieval_result = RetrievalResult(
-                        chunk=chunk,
-                        score=result.score,
-                        rank=i + 1
-                    )
-                    db_search_results.append(retrieval_result)
+                # Use search results directly (SearchResult objects)
+                db_search_results = db_search_results_raw
                 
                 # Update knowledge base search step
                 kb_search_step['status'] = 'complete'
@@ -656,7 +614,7 @@ async def advanced_rag_stream(request: ChatRequest):
                 if db_search_results:
                     kb_search_step['searchResults'] = [
                         {
-                            'title': result.chunk.document_title,
+                            'title': result.metadata.get('title', result.metadata.get('document_title', 'Unknown')),
                             'url': f"Score: {result.score:.3f}",
                             'type': 'knowledge_base'
                         }
@@ -681,10 +639,10 @@ Features: {web_result.get('features', {})}
                 # Add existing database results - more for overview queries
                 max_db_results = min(10, len(db_search_results)) if any(keyword in request.message.lower() for keyword in overview_keywords) else 2
                 for result in db_search_results[:max_db_results]:
-                    source_collection = result.chunk.metadata.get('source_collection', 'unknown')
+                    source_collection = result.metadata.get('source_collection', result.source)
                     if source_collection == 'web_research':
                         source_type = "🌐 WEB SEARCH (STORED)"
-                        source_url = result.chunk.metadata.get('url', '')
+                        source_url = result.metadata.get('url', '')
                         url_info = f" | URL: {source_url}" if source_url else ""
                     elif source_collection == 'documents':
                         source_type = "📄 UPLOADED DOCUMENT"
@@ -693,10 +651,11 @@ Features: {web_result.get('features', {})}
                         source_type = "📚 KNOWLEDGE BASE"
                         url_info = ""
                     
+                    doc_title = result.metadata.get('title', result.metadata.get('document_title', 'Unknown'))
                     combined_context.append(f"""
-{source_type}: {result.chunk.document_title}
+{source_type}: {doc_title}
 Relevance: {result.score:.3f}{url_info}
-Content: {result.chunk.content[:600]}...
+Content: {result.content[:600]}...
 ----""")
                 
                 # Create enhanced system prompt with combined context
