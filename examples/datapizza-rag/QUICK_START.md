@@ -45,6 +45,46 @@ The backend now uses **[datapizza-ai](https://github.com/datapizza-labs/datapizz
 
 ## ⚙️ Setup Instructions
 
+### 0. Install VittoriaDB (Prerequisites)
+
+Before starting, you need to install VittoriaDB. Choose the easiest method:
+
+#### Quick Install (Recommended)
+```bash
+# One-line installer - downloads pre-built binary for your platform
+curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/install.sh | bash
+```
+
+This installs `vittoriadb` to `/usr/local/bin` (or `~/.local/bin` on Linux).
+
+#### Build from Source (If you have Go installed)
+```bash
+# From the VittoriaDB project root
+make build
+
+# This creates ./build/vittoriadb
+```
+
+#### Download Pre-built Binary
+```bash
+# Visit: https://github.com/antonellof/VittoriaDB/releases/latest
+# Download for your platform:
+# - vittoriadb-v0.5.0-darwin-arm64 (Mac M1/M2)
+# - vittoriadb-v0.5.0-darwin-amd64 (Mac Intel)
+# - vittoriadb-v0.5.0-linux-amd64 (Linux)
+# - vittoriadb-v0.5.0-windows-amd64.exe (Windows)
+
+# Make it executable (Mac/Linux)
+chmod +x vittoriadb-*
+mv vittoriadb-* /usr/local/bin/vittoriadb
+```
+
+#### Verify Installation
+```bash
+vittoriadb --version
+# Should show: VittoriaDB version v0.5.0
+```
+
 ### 1. Configure Environment Variables
 
 #### Backend Configuration
@@ -120,8 +160,12 @@ Open **3 terminal windows**:
 #### Terminal 1: VittoriaDB
 
 ```bash
+# If you used the installer or downloaded to PATH:
+vittoriadb run --data-dir ./data --port 8080
+
+# Or if you built from source:
 cd /Users/d695663/Desktop/Dev/CognitoraVector
-./build/vittoriadb run --port 8080
+./build/vittoriadb run --data-dir ./data --port 8080
 ```
 
 Wait for: `✅ VittoriaDB listening on :8080`
@@ -313,7 +357,7 @@ pkill vittoriadb
 rm -rf data/*
 
 # Restart VittoriaDB
-./build/vittoriadb --data-dir ./data --port 8080
+vittoriadb run --data-dir ./data --port 8080
 ```
 
 ## 📊 Performance Tips

@@ -40,18 +40,49 @@ A complete, production-ready RAG (Retrieval-Augmented Generation) system powered
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 18+
-- OpenAI API key OR Ollama installed locally
+- **Go 1.21+** (to build VittoriaDB)
+- **Python 3.11+**
+- **Node.js 18+**
+- **OpenAI API key** OR **Ollama** installed locally
 
-### 1. Start VittoriaDB
+### 1. Install/Build VittoriaDB
 
+Choose one of these methods:
+
+#### Option A: Quick Install (Recommended)
+```bash
+# One-line installer (downloads pre-built binary)
+curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/install.sh | bash
+```
+
+#### Option B: Build from Source
 ```bash
 # From project root
+make build
+
+# This creates ./build/vittoriadb
+```
+
+#### Option C: Download Release
+```bash
+# Download for your platform
+# Visit: https://github.com/antonellof/VittoriaDB/releases
+# Extract and place binary in your PATH or project root
+```
+
+### 2. Start VittoriaDB
+
+```bash
+# If you used the installer or downloaded release:
+vittoriadb run --data-dir ./data --port 8080
+
+# Or if you built from source:
 ./build/vittoriadb run --data-dir ./data --port 8080
 ```
 
-### 2. Configure & Start Backend
+Wait for: `✅ VittoriaDB listening on :8080`
+
+### 3. Configure & Start Backend
 
 ```bash
 cd examples/datapizza-rag/backend
@@ -83,7 +114,7 @@ python main.py
 
 Backend will be available at `http://localhost:8501`
 
-### 3. Start Frontend
+### 4. Start Frontend
 
 ```bash
 cd examples/datapizza-rag/frontend
