@@ -735,13 +735,16 @@ Content: {result.content[:600]}...
                     {"role": "user", "content": user_prompt}
                 ]
                 
-                async for chunk in rag_system.openai_client.client.chat.completions.create(
+                # Create the stream (await first, then iterate)
+                stream = await rag_system.openai_client.client.chat.completions.create(
                     model=model_to_use,
                     messages=stream_messages,
                     temperature=0.7,
                     max_tokens=1500,
                     stream=True
-                ):
+                )
+                
+                async for chunk in stream:
                     if chunk.choices[0].delta.content:
                         yield f"data: {json.dumps({'type': 'content', 'content': chunk.choices[0].delta.content})}\n\n"
                         await asyncio.sleep(0.001)
@@ -1026,13 +1029,16 @@ Show me examples of the core functionality?
             
             # Stream response using Datapizza AI OpenAI client
             response_chunks = []
-            async for chunk in rag_system.openai_client.client.chat.completions.create(
+            # Create the stream (await first, then iterate)
+            stream = await rag_system.openai_client.client.chat.completions.create(
                 model=request.model,
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1500,
                 stream=True
-            ):
+            )
+            
+            async for chunk in stream:
                 if chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
                     response_chunks.append(content)
