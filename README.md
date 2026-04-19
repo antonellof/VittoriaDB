@@ -71,10 +71,10 @@ curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/
 
 ```bash
 # Download for your platform from GitHub Releases (replace tag if needed)
-wget https://github.com/antonellof/VittoriaDB/releases/download/v0.6.0/vittoriadb-v0.6.0-linux-amd64.tar.gz
-tar -xzf vittoriadb-v0.6.0-linux-amd64.tar.gz
-chmod +x vittoriadb-v0.6.0-linux-amd64
-./vittoriadb-v0.6.0-linux-amd64 run
+wget https://github.com/antonellof/VittoriaDB/releases/download/v0.7.0/vittoriadb-v0.7.0-linux-amd64.tar.gz
+tar -xzf vittoriadb-v0.7.0-linux-amd64.tar.gz
+chmod +x vittoriadb-v0.7.0-linux-amd64
+./vittoriadb-v0.7.0-linux-amd64 run
 ```
 
 ### Python SDK
@@ -509,7 +509,7 @@ curl http://localhost:8080/config
 
 ## 🎯 Performance
 
-### Reproducible benchmarks (v0.6.0)
+### Reproducible benchmarks (v0.7.0)
 
 Checked-in suite — run locally:
 
@@ -641,7 +641,7 @@ vittoriadb run --config vittoriadb.yaml --port 9090
 
 **Not there yet (targets for upcoming releases):** clustered / HA deployment; **backup/restore** CLI paths (API returns “not implemented”); **IVF** index type; CPU **SIMD intrinsics** (chunked Go math exists in `[pkg/core/simd.go](pkg/core/simd.go)`); full **compaction** / WAL replay polish; recall metrics inside `pkg/index.RunBenchmark`.
 
-Track **[GitHub Releases](https://github.com/antonellof/VittoriaDB/releases)** — **[v0.6.0](RELEASE_NOTES_v0.6.0.md)** is the current baseline.
+Track **[GitHub Releases](https://github.com/antonellof/VittoriaDB/releases)** — current: **[v0.7.0](RELEASE_NOTES_v0.7.0.md)**.
 
 ## 📋 System Requirements
 
