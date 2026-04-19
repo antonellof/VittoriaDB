@@ -2,25 +2,86 @@
 
 This guide covers VittoriaDB's performance characteristics, optimization strategies, and benchmarking results.
 
-## 📊 Performance Overview
+## 📊 Reproducible benchmarks (v0.6.0)
 
-### Benchmarks (v0.4.0)
-- **Insert Speed**: >2.6M vectors/second (HNSW, small datasets), >1.7M vectors/second (large datasets)
-- **Search Speed**: <1ms for small datasets (HNSW), sub-millisecond latency for optimized queries
-- **Memory Usage**: Linear scaling - 1MB for 1K vectors, 167MB for 50K vectors (768 dimensions)
-- **Startup Time**: <100ms (cold start), <50ms (warm start)
-- **Binary Size**: ~8MB (compressed), ~25MB (uncompressed)
-- **Index Build**: <2 seconds for 100k vectors (HNSW)
-- **Document Processing**: >1000 documents/minute (PDF/DOCX)
-- **Python Client**: Zero-overhead connection management
+The numbers below come from `pkg/index/bench_test.go`, which is checked in and
+runs with `go test -bench`. They reflect the **single-thread, in-process Go
+SDK path** (no HTTP, no batching), which is the path the official Python and
+Go clients hit when they're embedded.
 
-### Comprehensive Performance Results
-📊 **[View Complete Benchmark Results](https://gist.github.com/antonellof/19069bb56573fcf72ce592b3c2f2fc74)** - Detailed performance testing with Native Go SDK integration
+```bash
+go test -bench=. -benchmem -benchtime=3s -run=^$ ./pkg/index/
+```
+
+### Apple M2 Pro, dim=384, cosine, default HNSW (M=16, ef_construction=200, ef_search=50)
+
+| Operation | Throughput | Latency / op | Allocs/op | Bytes/op |
+|---|---|---|---|---|
+| `HNSW Add` | **1,296 vectors/sec** | 772 µs | 1,748 | 165 KB |
+| `HNSW Search`, n=10k, k=10 | **7,183 queries/sec** | 139 µs | 275 | 27 KB |
+| `Flat Search`, n=10k, k=10 (baseline) | 187 queries/sec | 5.34 ms | 10,003 | 322 KB |
+
+HNSW is ~38× faster than the brute-force flat baseline at 10k vectors. Single
+inserts are intentionally slow because each one runs the full HNSW graph
+construction with default parameters; for ingestion you should use the batch
+APIs (`InsertBatch` / `InsertTextBatch`) which amortize the cost.
+
+### How this compares to other vector DBs
+
+These numbers are **not** apples-to-apples (different datasets, dimensions,
+batching, hardware, and network paths), but they give a directional picture
+based on independently published 2025 benchmarks:
+
+| DB | Scale tested | Reported insert | Reported P50 search | Notes |
+|---|---|---|---|---|
+| **VittoriaDB v0.6.0** (this bench) | 10k × 384-d | 1.3k vec/s (single insert, in-process) | **0.14 ms** (k=10) | M2 Pro, single thread, no HTTP |
+| **Qdrant 1.x** ([leaper.dev 2026](https://leaper.dev/blog/vector-databases-compared-2026.html)) | 1M × 768-d | ~2.8k vec/s | ~4 ms | Batched ingest, server hop |
+| **Milvus 2.x** | 1M × 768-d | ~1.5k vec/s | ~6 ms | Distributed-ready |
+| **Weaviate 1.x** | 1M × 768-d | ~1.9k vec/s | ~12 ms | HNSW + scalar quant |
+| **Chroma** | <1M (single-node ceiling) | ~0.6k vec/s | ~12 ms | Designed for prototyping |
+
+The 1M-scale numbers above are from the [Leaper 2026 vector DB
+comparison](https://leaper.dev/blog/vector-databases-compared-2026.html) and
+should be treated as a rough reference, not a head-to-head. We have not
+validated VittoriaDB at 1M+ vectors yet; the in-process numbers shrink as the
+dataset grows because the HNSW graph gets deeper.
+
+### Where VittoriaDB wins / loses today
+
+**Wins**
+- **Sub-150 µs P50 search** at 10k × 384-d through the in-process Go SDK
+  (no network, no serialization overhead). For embedded-style workloads
+  (single binary, single process) that's hard to beat with a server-based DB.
+- **Zero ops**: single 10 MB binary, zero config, no Docker/Kubernetes
+  required. Closest analogue in the comparison table is Chroma.
+- **Built-in document ingestion** (PDF / DOCX / MD / HTML / TXT) and
+  **server-side embeddings** (Ollama, OpenAI, HuggingFace, Sentence
+  Transformers) without external services.
+
+**Loses**
+- **Not yet validated at 1M+ vectors** — benchmarks above only cover up to
+  10k. Qdrant/Milvus/Weaviate publish numbers up to 100M and have battle-
+  tested clustering and quantization that VittoriaDB lacks.
+- **No clustering / replication / sharding** — VittoriaDB is single-node
+  today. If you need distributed search, use Qdrant or Milvus.
+- **No scalar/binary quantization** — competitors offer 4×–32× memory
+  reduction via quantization; VittoriaDB stores raw float32 today.
+- **IVF index is stubbed**, only HNSW and flat are implemented.
+
+If you're a sub-1M-vector RAG/local AI workload that wants embedded
+deployment and zero ops, VittoriaDB is a great fit. If you're operating at
+billion-vector scale with high QPS and SLOs, use a hardened DB like Qdrant
+or Milvus.
+
+---
+
+## 📜 Older benchmark notes (v0.4.0)
+📊 **[View Complete Benchmark Results](https://gist.github.com/antonellof/19069bb56573fcf72ce592b3c2f2fc74)** - Detailed performance testing with Native Go SDK integration. The headline numbers below are kept for historical context; they were measured with batched insertion paths against synthetic data and are not directly comparable to the single-thread numbers above.
 
 **Key Performance Highlights:**
-- **Peak Insert Rate**: 2,645,209 vectors/sec (HNSW, small dataset)
-- **Peak Search Rate**: 1,266.72 searches/sec (HNSW, small dataset)  
-- **Lowest Latency**: 789.44µs (HNSW, small dataset)
+- **Peak Insert Rate**: 2,645,209 vectors/sec (HNSW, small dataset, batched)
+- **Peak Search Rate**: 1,266.72 searches/sec (HNSW, small dataset)
+- **Lowest Latency**: 789.44 µs (HNSW, small dataset)
 - **Large-Scale Performance**: 1,685,330 vectors/sec for 87.89 MB dataset
 - **Memory Efficiency**: Linear scaling with excellent performance characteristics
 

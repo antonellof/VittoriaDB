@@ -66,7 +66,7 @@ from .types import (
 )
 from . import configure
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __author__ = "VittoriaDB Team"
 __email__ = "team@vittoriadb.dev"
 

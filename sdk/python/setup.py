@@ -37,7 +37,7 @@ class PostInstallCommand(install):
             return
         
         # Download URL (GitHub releases)
-        version = "v0.5.0"
+        version = "v0.6.0"
         url = f"https://github.com/antonellof/VittoriaDB/releases/download/{version}/{binary_name}"
         
         # Local path

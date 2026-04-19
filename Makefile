@@ -2,7 +2,7 @@
 
 # Variables
 BINARY_NAME=vittoriadb
-VERSION?=0.1.0
+VERSION?=0.6.0
 BUILD_DIR=build
 GO_FILES=$(shell find . -name "*.go" -type f)
 PYTHON_DIR=python
