@@ -268,6 +268,23 @@ class VittoriaDB:
         
         return DatabaseStats.from_dict(data)
     
+    def prometheus_metrics(self) -> str:
+        """
+        Return Prometheus exposition text from ``GET /metrics``.
+
+        Includes search request counts, mean latency, and approximate QPS since
+        the HTTP server started.
+        """
+        response = self._make_request("GET", "/metrics")
+        if response.status_code >= 400:
+            try:
+                data = response.json()
+                msg = data.get("error", response.text)
+            except json.JSONDecodeError:
+                msg = response.text or f"HTTP {response.status_code}"
+            raise VittoriaDBError(msg)
+        return response.text
+    
     def config(self) -> Dict[str, Any]:
         """Get current server configuration (v0.5.0+)."""
         response = self._make_request("GET", "/config")
@@ -353,25 +370,52 @@ class Collection:
                filter: Optional[Dict[str, Any]] = None,
                include_vector: bool = False,
                include_metadata: bool = True,
-               include_content: bool = False) -> List[SearchResult]:
-        """Search for similar vectors."""
-        params = {
-            "vector": ",".join(map(str, vector)),
-            "limit": limit,
-            "offset": offset,
-            "include_vector": str(include_vector).lower(),
-            "include_metadata": str(include_metadata).lower(),
-            "include_content": str(include_content).lower()
-        }
-        
-        if filter:
-            params["filter"] = json.dumps(filter)
-        
-        response = self.client._make_request(
-            "GET", 
-            f"/collections/{self.name}/search",
-            params=params
-        )
+               include_content: bool = False,
+               use_post: bool = False) -> List[SearchResult]:
+        """Search for similar vectors.
+
+        ``filter`` may be a **flat map** of field names to values (implicit
+        equality, AND-combined), e.g. ``{"category": "tech"}``, or a structured
+        filter tree as documented in the REST API. For large or nested filters,
+        set ``use_post=True`` to send a JSON body (``POST .../search``).
+
+        IVF collections may pass ``search_params`` only via POST in the REST
+        API; the Python client does not expose that field on ``search`` yet.
+        """
+        if use_post:
+            payload: Dict[str, Any] = {
+                "vector": vector,
+                "limit": limit,
+                "offset": offset,
+                "include_vector": include_vector,
+                "include_metadata": include_metadata,
+                "include_content": include_content,
+            }
+            if filter is not None:
+                payload["filter"] = filter
+            response = self.client._make_request(
+                "POST",
+                f"/collections/{self.name}/search",
+                json=payload,
+            )
+        else:
+            params = {
+                "vector": ",".join(map(str, vector)),
+                "limit": limit,
+                "offset": offset,
+                "include_vector": str(include_vector).lower(),
+                "include_metadata": str(include_metadata).lower(),
+                "include_content": str(include_content).lower()
+            }
+            
+            if filter:
+                params["filter"] = json.dumps(filter)
+            
+            response = self.client._make_request(
+                "GET",
+                f"/collections/{self.name}/search",
+                params=params
+            )
         data = self.client._handle_response(response)
         
         results = []

@@ -163,12 +163,18 @@ def main():
     for coll in collections:
         print(f"   - {coll.name}: {coll.vector_count} vectors, {coll.dimensions}D")
     
-    # Database statistics
+    # Database statistics (includes search counters when the server tracks them)
     print("\n10. Database statistics...")
     stats = db.stats()
     print(f"    Total vectors: {stats.total_vectors}")
     print(f"    Total size: {stats.total_size} bytes")
     print(f"    Collections: {len(stats.collections)}")
+    print(f"    Queries (total): {stats.queries_total}")
+    print(f"    Avg query latency (s): {stats.avg_query_latency:.6f}")
+    print(f"    Queries/sec (approx): {stats.queries_per_sec:.6f}")
+    print("\n    Prometheus /metrics sample:")
+    for line in db.prometheus_metrics().strip().split("\n")[:8]:
+        print(f"      {line}")
     
     # Cleanup
     print("\n11. Cleaning up...")
@@ -189,6 +195,7 @@ def main():
     print("\nNext steps:")
     print("- Try the RAG example: python examples/rag_example.py")
     print("- Check the REST API: curl http://localhost:8080/health")
+    print("- Metrics: curl http://localhost:8080/metrics")
     print("- Visit the dashboard: http://localhost:8080/")
 
 

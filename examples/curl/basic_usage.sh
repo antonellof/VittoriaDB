@@ -3,6 +3,10 @@
 # VittoriaDB Basic Usage with cURL
 # This script demonstrates basic VittoriaDB operations using HTTP API calls
 # Make sure VittoriaDB is running: ./vittoriadb run
+#
+# Offline backup/restore (CLI, not HTTP): stop the server first, then e.g.
+#   ./vittoriadb backup --data-dir ./data --output ./backup.tar.gz
+#   ./vittoriadb restore --data-dir ./restored --input ./backup.tar.gz
 
 set -e  # Exit on any error
 
@@ -42,9 +46,12 @@ check_connection() {
     if curl -s -f "$BASE_URL/stats" > /dev/null; then
         print_success "Connected to VittoriaDB at $BASE_URL"
         
-        # Get and display stats
+        # Get and display stats (includes queries_total / latency when searches ran)
         stats=$(curl -s "$BASE_URL/stats")
         echo "Database Stats: $stats"
+
+        print_info "Prometheus metrics (GET /metrics) ..."
+        curl -s "$BASE_URL/metrics" | head -12
     else
         print_error "Failed to connect to VittoriaDB"
         print_info "Make sure VittoriaDB is running with: ./vittoriadb run"
@@ -196,7 +203,7 @@ perform_searches() {
         -H "Content-Type: application/json" \
         -d '{
             "vector": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-            "k": 3
+            "limit": 3
         }')
     
     echo "Search Results:"
@@ -212,7 +219,7 @@ perform_searches() {
         -H "Content-Type: application/json" \
         -d '{
             "vector": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-            "k": 2,
+            "limit": 2,
             "filter": {
                 "category": "technology"
             }

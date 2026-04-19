@@ -160,15 +160,13 @@ func (e *FileStorageEngine) WritePage(page *Page) error {
 	// Calculate checksum
 	page.Checksum = e.calculatePageChecksum(page)
 
-	// Write to WAL first
+	// Write to WAL first (sequence + checksum assigned in Append)
 	walEntry := &WALEntry{
-		Sequence:  e.getNextWALSequence(),
 		Type:      WALOpUpdate,
 		PageID:    page.ID,
 		Data:      e.serializePage(page),
 		Timestamp: time.Now().Unix(),
 	}
-	walEntry.Checksum = e.calculateWALChecksum(walEntry)
 
 	if err := e.wal.Append(walEntry); err != nil {
 		return fmt.Errorf("failed to write WAL entry: %w", err)
@@ -230,14 +228,11 @@ func (e *FileStorageEngine) FreePage(pageID uint32) error {
 	// Remove from cache
 	e.cache.Remove(pageID)
 
-	// Write WAL entry
 	walEntry := &WALEntry{
-		Sequence:  e.getNextWALSequence(),
 		Type:      WALOpDelete,
 		PageID:    pageID,
 		Timestamp: time.Now().Unix(),
 	}
-	walEntry.Checksum = e.calculateWALChecksum(walEntry)
 
 	return e.wal.Append(walEntry)
 }
@@ -410,9 +405,12 @@ func (e *FileStorageEngine) deserializePage(data []byte) *Page {
 	binary.Read(buf, binary.LittleEndian, &page.LSN)
 	binary.Read(buf, binary.LittleEndian, &page.Checksum)
 
-	// Read remaining data
-	remaining := make([]byte, len(data)-24) // 24 bytes for header
-	buf.Read(remaining)
+	// Remaining payload after fixed header (21 bytes: u32+u8+u16+u16+u64+u32)
+	remaining := make([]byte, buf.Len())
+	if _, err := buf.Read(remaining); err != nil {
+		page.Data = nil
+		return page
+	}
 	page.Data = remaining
 
 	return page
@@ -451,15 +449,6 @@ func (e *FileStorageEngine) calculateHeaderChecksum() uint32 {
 	return crc32.ChecksumIEEE(buf.Bytes())
 }
 
-func (e *FileStorageEngine) calculateWALChecksum(entry *WALEntry) uint32 {
-	buf := new(bytes.Buffer)
-	walEntry := *entry
-	walEntry.Checksum = 0 // Exclude checksum from calculation
-
-	binary.Write(buf, binary.LittleEndian, &walEntry)
-	return crc32.ChecksumIEEE(buf.Bytes())
-}
-
 func (e *FileStorageEngine) copyPage(page *Page) *Page {
 	data := make([]byte, len(page.Data))
 	copy(data, page.Data)
@@ -475,12 +464,71 @@ func (e *FileStorageEngine) copyPage(page *Page) *Page {
 	}
 }
 
-func (e *FileStorageEngine) getNextWALSequence() uint64 {
-	// TODO: Implement proper WAL sequence tracking
-	return uint64(time.Now().UnixNano())
-}
-
 func (e *FileStorageEngine) replayWAL() error {
-	// TODO: Implement WAL replay
+	if e.wal == nil || e.file == nil {
+		return nil
+	}
+
+	var maxSeq uint64
+	freedSeen := make(map[uint32]struct{})
+
+	replayFn := func(entry *WALEntry) error {
+		if entry.Sequence > maxSeq {
+			maxSeq = entry.Sequence
+		}
+
+		switch entry.Type {
+		case WALOpUpdate, WALOpInsert:
+			if len(entry.Data) == 0 {
+				return nil
+			}
+			page := e.deserializePage(entry.Data)
+			if err := e.writePageToDisk(page); err != nil {
+				return fmt.Errorf("replay page %d: %w", page.ID, err)
+			}
+			e.cache.Put(page.ID, e.copyPage(page))
+
+			newCount := uint64(page.ID) + 1
+			if newCount > e.header.PageCount {
+				e.header.PageCount = newCount
+			}
+			next := page.ID + 1
+			if next > e.nextPageID {
+				e.nextPageID = next
+			}
+			return nil
+
+		case WALOpDelete:
+			if _, dup := freedSeen[entry.PageID]; dup {
+				return nil
+			}
+			freedSeen[entry.PageID] = struct{}{}
+			e.freeList = append(e.freeList, entry.PageID)
+			e.cache.Remove(entry.PageID)
+			return nil
+
+		case WALOpCommit:
+			return nil
+		default:
+			return nil
+		}
+	}
+
+	if err := e.wal.Replay(replayFn); err != nil {
+		return err
+	}
+
+	if maxSeq > 0 {
+		if err := e.writeHeader(); err != nil {
+			return fmt.Errorf("persist header after WAL replay: %w", err)
+		}
+		fw, ok := e.wal.(*FileWAL)
+		if ok {
+			if err := fw.ResetPreservingSequence(maxSeq); err != nil {
+				return fmt.Errorf("reset WAL after replay: %w", err)
+			}
+		}
+	}
+
 	return nil
 }

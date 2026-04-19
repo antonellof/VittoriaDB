@@ -7,11 +7,12 @@ binary management and lifecycle control.
 
 The VittoriaDB server is a single Go binary that provides:
 - Zero-configuration vector database
-- High-performance HNSW indexing  
+- High-performance indexing (Flat, HNSW, IVF prototype)
 - Server-side automatic embeddings
 - Document processing capabilities
-- RESTful API with native Python client
-- **NEW in v0.4.0**: Built-in content storage for RAG applications
+- RESTful API with native Python client (metadata filters: flat maps or structured JSON)
+- Built-in content storage for RAG applications
+- Prometheus ``GET /metrics`` for search throughput and latency; ``/stats`` reports query totals
 
 Example usage:
     import vittoriadb
@@ -50,6 +51,8 @@ from .types import (
     Vector,
     SearchResult,
     CollectionInfo,
+    HealthStatus,
+    DatabaseStats,
     DistanceMetric,
     IndexType,
     VectorizerType,
@@ -66,7 +69,7 @@ from .types import (
 )
 from . import configure
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 __author__ = "VittoriaDB Team"
 __email__ = "team@vittoriadb.dev"
 
@@ -77,6 +80,8 @@ __all__ = [
     "Vector",
     "SearchResult",
     "CollectionInfo",
+    "HealthStatus",
+    "DatabaseStats",
     "DistanceMetric",
     "IndexType",
     "VectorizerType",

@@ -7,6 +7,9 @@ particularly for vectorizer configurations that enable automatic embedding gener
 Example usage:
     from vittoriadb.configure import Configure
     
+    # IVF index tuning (with ``index_type=IndexType.IVF``)
+    ivf_cfg = Configure.Index.ivf_flat(nlist=16, nprobe=2)
+    
     # Automatic embeddings with default settings
     config = Configure.Vectors.auto_embeddings()
     
@@ -19,6 +22,20 @@ Example usage:
 
 from typing import Dict, Any, Optional
 from .types import VectorizerConfig, VectorizerType
+
+
+class IndexConfiguration:
+    """Optional index tuning passed as ``create_collection(..., config=...)``."""
+
+    @staticmethod
+    def ivf_flat(nlist: int = 16, nprobe: int = 2) -> Dict[str, Any]:
+        """
+        IVF index tuning (maps to server keys ``nlist`` / ``nprobe``).
+
+        Use with ``index_type=vittoriadb.IndexType.IVF``. IVF is suitable for
+        larger collections on a single node; behaviour is prototype-level.
+        """
+        return {"nlist": nlist, "nprobe": nprobe}
 
 
 class VectorConfiguration:
@@ -170,6 +187,7 @@ class Configure:
     
     # Vector configuration
     Vectors = VectorConfiguration
+    Index = IndexConfiguration
     
     @staticmethod
     def default_collection_config() -> Dict[str, Any]:

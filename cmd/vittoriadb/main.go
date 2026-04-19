@@ -226,6 +226,23 @@ func main() {
 				},
 				Action: backupDatabase,
 			},
+			{
+				Name:  "restore",
+				Usage: "Restore database from a .tar.gz backup (offline — stop the server first)",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "data-dir",
+						Value: "./data",
+						Usage: "Data directory path",
+					},
+					&cli.StringFlag{
+						Name:     "input",
+						Usage:    "Backup archive (.tar.gz) produced by backup",
+						Required: true,
+					},
+				},
+				Action: restoreDatabase,
+			},
 		},
 	}
 
@@ -457,8 +474,39 @@ func showStats(c *cli.Context) error {
 }
 
 func backupDatabase(c *cli.Context) error {
-	// TODO: Implement backup functionality
-	return fmt.Errorf("backup functionality not implemented yet")
+	dataDir := c.String("data-dir")
+	outPath := c.String("output")
+
+	f, err := os.Create(outPath)
+	if err != nil {
+		return fmt.Errorf("create backup file: %w", err)
+	}
+	defer f.Close()
+
+	if err := core.BackupDataDir(dataDir, f); err != nil {
+		return fmt.Errorf("backup failed: %w", err)
+	}
+
+	fmt.Printf("Backup written to %s\n", outPath)
+	return nil
+}
+
+func restoreDatabase(c *cli.Context) error {
+	dataDir := c.String("data-dir")
+	inPath := c.String("input")
+
+	f, err := os.Open(inPath)
+	if err != nil {
+		return fmt.Errorf("open backup: %w", err)
+	}
+	defer f.Close()
+
+	if err := core.RestoreDataDir(dataDir, f); err != nil {
+		return fmt.Errorf("restore failed: %w", err)
+	}
+
+	fmt.Printf("Restored backup into %s\n", dataDir)
+	return nil
 }
 
 func showDatabaseInfo(c *cli.Context) error {

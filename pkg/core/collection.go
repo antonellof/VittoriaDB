@@ -374,6 +374,9 @@ func (c *VittoriaCollection) Search(ctx context.Context, req *SearchRequest) (*S
 		return nil, fmt.Errorf("collection is closed")
 	}
 
+	start := time.Now()
+	defer func() { RecordSearchObserved(time.Since(start)) }()
+
 	// Use parallel search engine if available
 	if c.searchEngine != nil {
 		return c.searchEngine.Search(ctx, req)

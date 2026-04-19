@@ -24,6 +24,7 @@ type Server struct {
 	config        *ServerConfig
 	unifiedConfig *config.VittoriaConfig
 	processor     *processor.ProcessorFactory
+	startedAt     time.Time
 }
 
 // ServerConfig represents server configuration
@@ -44,6 +45,7 @@ func NewServer(db core.Database, config *ServerConfig, unifiedConfig *config.Vit
 		config:        config,
 		unifiedConfig: unifiedConfig,
 		processor:     processor.NewProcessorFactory(),
+		startedAt:     time.Now(),
 	}
 
 	s.setupRoutes()
@@ -76,6 +78,7 @@ func (s *Server) setupRoutes() {
 	// Health and stats
 	s.router.HandleFunc("/health", s.handleHealth).Methods("GET")
 	s.router.HandleFunc("/stats", s.handleStats).Methods("GET")
+	s.router.HandleFunc("/metrics", s.handleMetrics).Methods("GET")
 	s.router.HandleFunc("/config", s.handleConfig).Methods("GET")
 
 	// Collection management
@@ -132,6 +135,26 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, stats)
+}
+
+// Prometheus-compatible text metrics for search throughput and latency.
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	n, avg := core.SearchMetricsSnapshot()
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	uptime := time.Since(s.startedAt).Seconds()
+	qps := 0.0
+	if uptime > 0 && n > 0 {
+		qps = float64(n) / uptime
+	}
+	fmt.Fprintf(w, "# HELP vittoriadb_search_requests_total Total vector searches completed.\n")
+	fmt.Fprintf(w, "# TYPE vittoriadb_search_requests_total counter\n")
+	fmt.Fprintf(w, "vittoriadb_search_requests_total %d\n", n)
+	fmt.Fprintf(w, "# HELP vittoriadb_search_latency_seconds Mean search latency (seconds).\n")
+	fmt.Fprintf(w, "# TYPE vittoriadb_search_latency_seconds gauge\n")
+	fmt.Fprintf(w, "vittoriadb_search_latency_seconds %g\n", avg.Seconds())
+	fmt.Fprintf(w, "# HELP vittoriadb_search_queries_per_second Approximate mean QPS since HTTP server start.\n")
+	fmt.Fprintf(w, "# TYPE vittoriadb_search_queries_per_second gauge\n")
+	fmt.Fprintf(w, "vittoriadb_search_queries_per_second %g\n", qps)
 }
 
 // Configuration endpoint
@@ -462,10 +485,34 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// Parse JSON body
-		if err := json.NewDecoder(r.Body).Decode(&searchReq); err != nil {
+		var aux struct {
+			Vector          []float32       `json:"vector"`
+			Limit           int             `json:"limit"`
+			Offset          int             `json:"offset"`
+			Filter          json.RawMessage `json:"filter"`
+			IncludeVector   bool            `json:"include_vector"`
+			IncludeMetadata bool            `json:"include_metadata"`
+			IncludeContent  bool            `json:"include_content"`
+			SearchParams    map[string]interface{} `json:"search_params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&aux); err != nil {
 			s.writeError(w, http.StatusBadRequest, "Invalid JSON", err)
 			return
+		}
+		searchReq.Vector = aux.Vector
+		searchReq.Limit = aux.Limit
+		searchReq.Offset = aux.Offset
+		searchReq.IncludeVector = aux.IncludeVector
+		searchReq.IncludeMetadata = aux.IncludeMetadata
+		searchReq.IncludeContent = aux.IncludeContent
+		searchReq.SearchParams = aux.SearchParams
+		if len(aux.Filter) > 0 {
+			f, err := core.ParseFilterJSON(aux.Filter)
+			if err != nil {
+				s.writeError(w, http.StatusBadRequest, "Invalid filter", err)
+				return
+			}
+			searchReq.Filter = f
 		}
 	}
 
@@ -524,13 +571,13 @@ func (s *Server) parseSearchParams(r *http.Request, req *core.SearchRequest) err
 	req.IncludeVector = query.Get("include_vector") == "true"
 	req.IncludeMetadata = query.Get("include_metadata") != "false" // default true
 
-	// Parse filter (JSON string)
+	// Parse filter (JSON string) — supports flat maps and structured Filter trees
 	if filterStr := query.Get("filter"); filterStr != "" {
-		var filter core.Filter
-		if err := json.Unmarshal([]byte(filterStr), &filter); err != nil {
+		f, err := core.ParseFilterJSON([]byte(filterStr))
+		if err != nil {
 			return fmt.Errorf("invalid filter format: %w", err)
 		}
-		req.Filter = &filter
+		req.Filter = f
 	}
 
 	return nil

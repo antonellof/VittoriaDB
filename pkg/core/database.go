@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -272,28 +271,25 @@ func (db *VittoriaDB) Stats(ctx context.Context) (*DatabaseStats, error) {
 		indexSize += onDisk
 	}
 
+	qTotal, avgLat := SearchMetricsSnapshot()
+	uptimeSec := time.Since(db.startTime).Seconds()
+	qps := float64(0)
+	if uptimeSec > 0 && qTotal > 0 {
+		qps = float64(qTotal) / uptimeSec
+	}
+
 	return &DatabaseStats{
 		Collections:     collectionStats,
-		TotalVectors:    totalVectors,
-		TotalSize:       totalSize,
-		IndexSize:       indexSize,
-		QueriesTotal:    0, // TODO: Implement query tracking
-		QueriesPerSec:   0, // TODO: Implement QPS calculation
-		AvgQueryLatency: 0, // TODO: Implement latency tracking
+		TotalVectors:      totalVectors,
+		TotalSize:         totalSize,
+		IndexSize:         indexSize,
+		QueriesTotal:      int64(qTotal),
+		QueriesPerSec:     qps,
+		AvgQueryLatency:   avgLat.Seconds(),
 	}, nil
 }
 
-// Backup creates a backup of the database
-func (db *VittoriaDB) Backup(ctx context.Context, w io.Writer) error {
-	// TODO: Implement backup functionality
-	return fmt.Errorf("backup not implemented yet")
-}
-
-// Restore restores the database from a backup
-func (db *VittoriaDB) Restore(ctx context.Context, r io.Reader) error {
-	// TODO: Implement restore functionality
-	return fmt.Errorf("restore not implemented yet")
-}
+// Backup / Restore live in backup.go
 
 // loadCollections loads existing collections from disk
 func (db *VittoriaDB) loadCollections(ctx context.Context) error {

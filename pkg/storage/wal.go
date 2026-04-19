@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/crc32"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -135,8 +137,8 @@ func (w *FileWAL) Replay(handler func(*WALEntry) error) error {
 	for {
 		entry, err := w.deserializeEntry(reader)
 		if err != nil {
-			if err.Error() == "EOF" {
-				break // End of file
+			if errors.Is(err, io.EOF) {
+				break
 			}
 			return fmt.Errorf("failed to deserialize WAL entry: %w", err)
 		}
@@ -194,7 +196,7 @@ func (w *FileWAL) Truncate(beforeSeq uint64) error {
 	for {
 		entry, err := w.deserializeEntry(reader)
 		if err != nil {
-			if err.Error() == "EOF" {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return fmt.Errorf("failed to read WAL entry during truncate: %w", err)
@@ -236,6 +238,40 @@ func (w *FileWAL) Truncate(beforeSeq uint64) error {
 
 // Private methods
 
+// ResetPreservingSequence truncates the WAL file after a successful replay so entries
+// are not reapplied on the next Open, while keeping monotonic sequence numbers for new writes.
+func (w *FileWAL) ResetPreservingSequence(lastSeq uint64) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.writer != nil {
+		if err := w.writer.Flush(); err != nil {
+			return err
+		}
+	}
+	if w.file != nil {
+		if err := w.file.Close(); err != nil {
+			return err
+		}
+		w.file = nil
+		w.writer = nil
+	}
+
+	if err := os.Truncate(w.filepath, 0); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("truncate WAL: %w", err)
+	}
+
+	file, err := os.OpenFile(w.filepath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("reopen WAL: %w", err)
+	}
+	w.file = file
+	w.writer = bufio.NewWriter(file)
+	w.sequence = lastSeq
+	w.size = 0
+	return nil
+}
+
 func (w *FileWAL) initialize() error {
 	// Get file info
 	info, err := w.file.Stat()
@@ -264,7 +300,7 @@ func (w *FileWAL) initialize() error {
 	for {
 		entry, err := w.deserializeEntry(reader)
 		if err != nil {
-			if err.Error() == "EOF" {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return fmt.Errorf("failed to read WAL entry during initialization: %w", err)

@@ -1,14 +1,14 @@
 # VittoriaDB - Local Vector Database for AI Development
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org)
-[![Python Version](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://python.org)
-[![PyPI version](https://badge.fury.io/py/vittoriadb.svg)](https://pypi.org/project/vittoriadb/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
+[Go Version](https://golang.org)
+[Python Version](https://python.org)
+[PyPI version](https://pypi.org/project/vittoriadb/)
+[License](LICENSE)
+[Build Status]()
 
 **VittoriaDB** is a high-performance, embedded vector database designed for local AI development and production deployments. Built with simplicity and performance in mind, it provides a zero-configuration solution for vector similarity search, perfect for RAG applications, semantic search, and AI prototyping.
 
-**Latest — v0.6.0:** Hugging Face Inference API embeddings (fully wired), reproducible [`pkg/index`](pkg/index/) benchmarks (`go test -bench`), metadata **search filters** (`eq`, `and`/`or`/`not`, `in`, comparisons), disk usage on `/health` & `/stats`, Python SDK fixes for `/documents` uploads — see **[RELEASE_NOTES_v0.6.0.md](RELEASE_NOTES_v0.6.0.md)**.
+**Latest — v0.7.0:** WAL replay & backup/restore, **`/metrics`** + query stats, REST filter compat (flat maps + structured trees), IVF index spike, **`pkg/hybrid`** scaffolding — see **[RELEASE_NOTES_v0.7.0.md](RELEASE_NOTES_v0.7.0.md)**. Previously: **[v0.6.0](RELEASE_NOTES_v0.6.0.md)**.
 
 ## 🎯 Why VittoriaDB?
 
@@ -18,15 +18,8 @@
 
 ## ✨ Key Features
 
-### 🌐 **Complete RAG Web Application**
-- **💬 ChatGPT-like Interface**: Modern web UI with real-time streaming responses
-- **📁 Multi-Format Document Processing**: PDF, DOCX, TXT, MD, HTML support
-- **🌐 Intelligent Web Research**: Real-time search with automatic knowledge storage
-- **👨‍💻 GitHub Repository Indexing**: Index and search entire codebases
-- **🛑 Operation Control**: Stop button for cancelling long-running operations
-- **📚 Built-in Content Storage**: No external storage needed for RAG workflows
-
 ### 🚀 **Core Database Features**
+
 - **🎯 Zero Configuration**: Works immediately after installation
 - **🤖 Professional Embedding Services**: Industry-standard vectorization options
   - **Ollama**: Local ML models (high quality, no API costs)
@@ -42,6 +35,7 @@
 - **🔒 Local First**: Keep your data private and secure
 
 ### 🚀 **Performance & configuration**
+
 - **🔧 Unified Configuration**: YAML, environment variables, CLI flags with intelligent precedence
 - **⚡ I/O Optimization**: Memory-mapped storage, async I/O, and chunked vector ops (up to 276x speedup on indexed reads)
 - **🔄 Parallel Search**: Configurable worker pools with 5-32x performance improvements
@@ -49,13 +43,13 @@
 - **🔧 Enhanced Batch Processing**: Intelligent error recovery and fallback mechanisms
 - **📊 Configuration API**: Runtime configuration inspection via HTTP endpoint
 
-## 📚 Documentation
+### 📚 Documentation
 
 - **[📦 Installation Guide](docs/installation.md)** - Complete installation instructions for all platforms
 - **[🚀 Quick Start](#-quick-start)** - Get started in 30 seconds
 - **[🐳 Docker RAG Demo](examples/web-ui-rag/)** - Complete ChatGPT-like web UI with Docker Compose
 - **[🐍 Python SDK](https://pypi.org/project/vittoriadb/)** - Official Python package on PyPI (`pip install vittoriadb`)
-- **[📚 Content Storage](docs/content-storage.md)** - **NEW!** Built-in content storage for RAG workflows
+- **[📚 Content Storage](docs/content-storage.md)** - Built-in content storage for RAG workflows
 - **[🤖 Embedding Services](docs/embeddings.md)** - Complete guide to auto_embeddings() and vectorizers
 - **[📖 Usage Examples](#-usage-examples)** - Python, Go, and cURL examples
 - **[🛠️ API Reference](docs/api.md)** - Complete REST API documentation
@@ -67,12 +61,14 @@
 ## 📦 Installation
 
 ### Quick Install (Recommended)
+
 ```bash
 # One-line installer for latest version
 curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/install.sh | bash
 ```
 
 ### Manual Installation
+
 ```bash
 # Download for your platform from GitHub Releases (replace tag if needed)
 wget https://github.com/antonellof/VittoriaDB/releases/download/v0.6.0/vittoriadb-v0.6.0-linux-amd64.tar.gz
@@ -81,23 +77,8 @@ chmod +x vittoriadb-v0.6.0-linux-amd64
 ./vittoriadb-v0.6.0-linux-amd64 run
 ```
 
-### 🌐 Web UI RAG Application (NEW!)
-```bash
-# Clone the repository
-git clone https://github.com/antonellof/VittoriaDB.git
-cd VittoriaDB/examples/web-ui-rag
-
-# Start the complete RAG application (development mode)
-./run-dev.sh
-
-# Or run with Docker Compose
-./docker-start.sh
-
-# Access the ChatGPT-like interface
-open http://localhost:3000
-```
-
 ### Python SDK
+
 ```bash
 # Install from PyPI (recommended)
 pip install vittoriadb
@@ -107,33 +88,32 @@ git clone https://github.com/antonellof/VittoriaDB.git
 cd VittoriaDB/sdk/python && ./install-dev.sh
 ```
 
+Browser-based RAG demo (React + backend + VittoriaDB): **[Quick Start — Web UI](#web-ui-rag-application)** · `**[examples/web-ui-rag/](examples/web-ui-rag/)`**
+
 > 📖 **See [Installation Guide](docs/installation.md) for complete instructions, platform-specific details, and troubleshooting.**
 
 ## 🚀 Quick Start
 
-### 🐳 Complete RAG Demo (Docker)
+### 🌐 Web UI RAG Application
 
-Try the full ChatGPT-like web interface with one command:
+Full-stack chat UI, document ingestion, and retrieval backed by VittoriaDB:
 
 ```bash
-# Clone and run the complete RAG system
 git clone https://github.com/antonellof/VittoriaDB.git
 cd VittoriaDB/examples/web-ui-rag
 
-# Configure environment
-cp env.example .env
-# Edit .env with your OpenAI API key
+cp env.example .env   # Add keys as needed (e.g. OpenAI)
 
-# Start everything with Docker Compose
-./run-dev.sh
+./run-dev.sh           # Development stack
+# Or: ./docker-start.sh
+
+open http://localhost:3000   # Web UI (Linux: xdg-open)
 ```
 
-**Access the demo:**
-- **Web UI**: http://localhost:3000 (ChatGPT-like interface)
-- **API**: http://localhost:8501 (FastAPI backend)
-- **VittoriaDB**: http://localhost:8080 (Vector database)
+**Endpoints:** Web UI [http://localhost:3000](http://localhost:3000) · FastAPI [http://localhost:8501](http://localhost:8501) · VittoriaDB [http://localhost:8080](http://localhost:8080)
 
 ### 30-Second CLI Demo
+
 ```bash
 # 1. Start VittoriaDB
 vittoriadb run
@@ -142,7 +122,7 @@ vittoriadb run
 curl http://localhost:8080/config    # View current configuration
 curl http://localhost:8080/health    # Check server health
 
-# 3. Create a collection with content storage (NEW!)
+# 3. Create a collection with content storage
 curl -X POST http://localhost:8080/collections \
   -H "Content-Type: application/json" \
   -d '{
@@ -169,6 +149,7 @@ curl "http://localhost:8080/collections/rag_docs/search/text?query=vector%20data
 VittoriaDB offers **four professional approaches** for handling embeddings:
 
 #### 🔧 **Approach 1: Ollama (Recommended)**
+
 ```python
 import vittoriadb
 from vittoriadb.configure import Configure
@@ -192,6 +173,7 @@ print(f"Found {len(results)} results")
 ```
 
 #### 🤖 **Approach 2: OpenAI API (Highest Quality)**
+
 ```python
 # OpenAI embeddings (highest quality, requires API key + credits)
 collection = db.create_collection(
@@ -202,6 +184,7 @@ collection = db.create_collection(
 ```
 
 #### 🤗 **Approach 3: HuggingFace API (Free Tier)**
+
 ```python
 # HuggingFace embeddings (good quality, free tier available)
 collection = db.create_collection(
@@ -212,6 +195,7 @@ collection = db.create_collection(
 ```
 
 #### 🐍 **Approach 4: Sentence Transformers (Local Python)**
+
 ```python
 # Local Python models (full control, heavy dependencies)
 collection = db.create_collection(
@@ -222,6 +206,7 @@ collection = db.create_collection(
 ```
 
 #### 💎 **Approach 5: Pure Vector Database (Manual Embeddings)**
+
 ```python
 import vittoriadb
 from sentence_transformers import SentenceTransformer
@@ -255,6 +240,7 @@ vectorizer_config = Configure.Vectors.auto_embeddings()
 ```
 
 **Behind the scenes, auto_embeddings():**
+
 1. **Uses Ollama local ML models** - Real neural networks, not statistical approximations
 2. **Requires minimal setup** - Just `ollama pull nomic-embed-text`
 3. **Works completely offline** - No API keys, no internet required
@@ -263,13 +249,15 @@ vectorizer_config = Configure.Vectors.auto_embeddings()
 
 ### Why Choose auto_embeddings()?
 
-| Traditional Approach | auto_embeddings() Advantage |
-|---------------------|------------------------------|
-| ❌ Complex model management | ✅ One-line configuration |
-| ❌ API costs and rate limits | ✅ Completely free to use |
-| ❌ Internet dependency | ✅ Works offline |
-| ❌ Statistical approximations | ✅ Real ML neural networks |
-| ❌ Vendor lock-in | ✅ Open-source local models |
+
+| Traditional Approach         | auto_embeddings() Advantage |
+| ---------------------------- | --------------------------- |
+| ❌ Complex model management   | ✅ One-line configuration    |
+| ❌ API costs and rate limits  | ✅ Completely free to use    |
+| ❌ Internet dependency        | ✅ Works offline             |
+| ❌ Statistical approximations | ✅ Real ML neural networks   |
+| ❌ Vendor lock-in             | ✅ Open-source local models  |
+
 
 ### Quick Setup
 
@@ -334,6 +322,7 @@ VittoriaDB is a single-process binary that combines an HTTP server, vector engin
 ```
 
 **Benefits:**
+
 - ✅ **Industry standard** - follows patterns used by Weaviate, Pinecone, Qdrant
 - ✅ **High-quality embeddings** - real ML models, not statistical approximations
 - ✅ **Flexible deployment** - local ML, cloud APIs, or Python processes
@@ -342,56 +331,47 @@ VittoriaDB is a single-process binary that combines an HTTP server, vector engin
 
 ### 🎯 **Service Comparison**
 
-| Service | Quality | Speed | Setup | Cost | Best For |
-|---------|---------|-------|-------|------|----------|
-| **🔧 Ollama** | High (85-95%) | Fast (~500ms) | `ollama pull nomic-embed-text` | Free | **Recommended** |
-| **🤖 OpenAI** | Highest (95%+) | Medium (~300ms) | API key required | $0.0001/1K tokens | **Highest Quality** |
-| **🤗 HuggingFace** | High (80-90%) | Medium (~500ms) | API token | Free tier | **Cost Effective** |
-| **🐍 Sentence Transformers** | High (85-95%) | Slow (~5s) | `pip install sentence-transformers` | Free | **Full Control** |
+
+| Service                      | Quality        | Speed           | Setup                               | Cost              | Best For            |
+| ---------------------------- | -------------- | --------------- | ----------------------------------- | ----------------- | ------------------- |
+| **🔧 Ollama**                | High (85-95%)  | Fast (~500ms)   | `ollama pull nomic-embed-text`      | Free              | **Recommended**     |
+| **🤖 OpenAI**                | Highest (95%+) | Medium (~300ms) | API key required                    | $0.0001/1K tokens | **Highest Quality** |
+| **🤗 HuggingFace**           | High (80-90%)  | Medium (~500ms) | API token                           | Free tier         | **Cost Effective**  |
+| **🐍 Sentence Transformers** | High (85-95%)  | Slow (~5s)      | `pip install sentence-transformers` | Free              | **Full Control**    |
+
 
 > 📖 **See [Performance Guide](docs/performance.md) for detailed architecture diagrams and performance characteristics.**
 
 ## 📖 Usage Examples
 
-### 🐳 Complete RAG Web Application
-
-The [`examples/web-ui-rag/`](examples/web-ui-rag/) directory contains a **production-ready ChatGPT-like web interface** with Docker Compose:
-
-**Features:**
-- 💬 **ChatGPT-like Interface**: Real-time streaming responses
-- 📁 **File Upload**: PDF, DOCX, TXT, MD, HTML processing
-- 🌐 **Web Research**: Automatic web scraping with Chromium
-- 👨‍💻 **GitHub Indexing**: Repository code search
-- 🧠 **Advanced RAG**: Context-aware responses with VittoriaDB
-
-```bash
-# One-command setup
-cd examples/web-ui-rag
-cp env.example .env  # Add your OpenAI API key
-./run-dev.sh         # Start everything with Docker
-```
-
 ### 📚 Code Examples by Language
 
-The [`examples/`](examples/) directory contains comprehensive examples organized by language:
+The `[examples/](examples/)` directory groups tutorials by language:
 
-- **🐍 Python**: RAG systems, document processing, performance benchmarks
-- **🔧 Go**: Native SDK usage, high-performance testing, advanced features  
-- **🌐 cURL**: HTTP API workflows, volume testing, bash scripting
+
+| Area       | Contents                                         |
+| ---------- | ------------------------------------------------ |
+| **Python** | RAG pipelines, embeddings, documents, benchmarks |
+| **Go**     | Native SDK, HTTP client, performance demos       |
+| **cURL**   | REST workflows, volume tests, bash scripts       |
+
 
 ```bash
-# Start VittoriaDB
 ./vittoriadb run
 
-# Run examples
 python examples/python/07_rag_complete_workflow.py
 cd examples/go && go run 01_http_client_basic_usage.go
 cd examples/curl && chmod +x basic_usage.sh && ./basic_usage.sh
 ```
 
-> 📖 **See [examples/README.md](examples/README.md) for complete documentation and requirements.**
+📖 **[examples/README.md](examples/README.md)** — full index, prerequisites, and recommended order.
+
+### 🌐 Web UI RAG Application
+
+React + FastAPI stack in `**[examples/web-ui-rag/](examples/web-ui-rag/)`** — same scope as **Complete RAG Web Application** in [Key Features](#key-features) (chat UI, documents, web research, GitHub, controls, storage). Run instructions: [Quick Start — Web UI](#web-ui-rag-application).
 
 ### Go Library Example
+
 ```go
 import (
   "context"
@@ -413,7 +393,8 @@ _, _ = col.Insert(ctx, &core.Vector{
 })
 ```
 
-### Python SDK Example  
+### Python SDK Example
+
 ```python
 # Install: pip install vittoriadb
 import vittoriadb
@@ -437,18 +418,20 @@ results = collection.search_text("find similar content", limit=10)
 ```
 
 ### RAG Application Example
+
 ```python
+import vittoriadb
 from sentence_transformers import SentenceTransformer
 
-model = SentenceTransformer('all-MiniLM-L6-v2')
+db = vittoriadb.connect(url="http://localhost:8080", auto_start=False)
+model = SentenceTransformer("all-MiniLM-L6-v2")
 collection = db.create_collection("knowledge", dimensions=384)
 
-# Add documents with embeddings
-for doc in documents:
+documents = ["Example passage one.", "Example passage two."]
+for i, doc in enumerate(documents):
     embedding = model.encode(doc).tolist()
     collection.insert(f"doc_{i}", embedding, {"text": doc})
 
-# Search knowledge base
 def search_knowledge(query):
     embedding = model.encode(query).tolist()
     return collection.search(embedding, limit=3)
@@ -462,7 +445,7 @@ VittoriaDB provides a comprehensive REST API for all vector database operations:
 # System endpoints
 curl http://localhost:8080/health        # Health check
 curl http://localhost:8080/stats         # Database statistics  
-curl http://localhost:8080/config        # Current configuration (NEW!)
+curl http://localhost:8080/config        # Current configuration
 
 # Create collection
 curl -X POST http://localhost:8080/collections \
@@ -480,9 +463,9 @@ curl -G http://localhost:8080/collections/docs/search \
   --data-urlencode 'limit=10'
 ```
 
-### **🔧 Configuration Endpoint (NEW!)**
+### **🔧 Configuration endpoint**
 
-The `/config` endpoint provides comprehensive information about the current VittoriaDB configuration:
+The `/config` endpoint returns the active unified configuration and feature flags:
 
 ```bash
 # Get current configuration
@@ -496,6 +479,7 @@ curl http://localhost:8080/config
 ```
 
 **Example response structure:**
+
 ```json
 {
   "config": { /* Complete VittoriaConfig */ },
@@ -552,12 +536,14 @@ On Apple M2 Pro (384-D, cosine, default HNSW): **~7k searches/sec** at 10k vecto
 VittoriaDB features a **unified configuration system** that's **fully backward compatible** with existing setups while providing advanced configuration management for production deployments.
 
 ### **✅ Zero Configuration (Works Out of the Box)**
+
 ```bash
 # Just works - no configuration needed!
 vittoriadb run
 ```
 
 ### **🔧 Basic Configuration**
+
 ```bash
 # CLI flags (backward compatible)
 vittoriadb run --host 0.0.0.0 --port 8080 --data-dir ./data
@@ -573,6 +559,7 @@ vittoriadb run --config vittoriadb.yaml
 ```
 
 ### **⚡ Advanced Features**
+
 ```bash
 # Performance optimization via environment variables
 export VITTORIA_PERF_ENABLE_SIMD=true
@@ -586,8 +573,9 @@ curl http://localhost:8080/config         # HTTP API endpoint
 ```
 
 ### **🔄 Configuration Precedence**
+
 1. **CLI flags** (`--host`, `--port`, etc.) - Highest priority
-2. **Environment variables** (`VITTORIA_*` or `VITTORIADB_*`)
+2. **Environment variables** (`VITTORIA_`* or `VITTORIADB_*`)
 3. **YAML configuration file** (`--config vittoriadb.yaml`)
 4. **Sensible defaults** - Works without any configuration
 
@@ -596,6 +584,7 @@ curl http://localhost:8080/config         # HTTP API endpoint
 ## 🖥️ CLI Commands
 
 ### Core Commands
+
 ```bash
 # Start the server
 vittoriadb run
@@ -608,7 +597,8 @@ vittoriadb info [--data-dir <path>]
 vittoriadb stats [--data-dir <path>]
 ```
 
-### **🔧 Configuration Commands (NEW!)**
+### **🔧 Configuration commands**
+
 ```bash
 # Generate sample configuration file
 vittoriadb config generate --output vittoriadb.yaml
@@ -627,6 +617,7 @@ vittoriadb config env --check
 ```
 
 ### Server Options
+
 ```bash
 # Traditional CLI flags (backward compatible)
 vittoriadb run \
@@ -648,7 +639,7 @@ vittoriadb run --config vittoriadb.yaml --port 9090
 
 **Works great today:** single-node, embedded-style deployments; RAG demos; REST + Python SDK; HNSW + flat indexes; WAL-backed storage; **[metadata filters](docs/api.md)** on search (equality, numeric compare, `and`/`or`/`not`, tag-style `in`, `contains`, `exists`).
 
-**Not there yet (targets for upcoming releases):** clustered / HA deployment; **backup/restore** CLI paths (API returns “not implemented”); **IVF** index type; CPU **SIMD intrinsics** (chunked Go math exists in [`pkg/core/simd.go`](pkg/core/simd.go)); full **compaction** / WAL replay polish; recall metrics inside `pkg/index.RunBenchmark`.
+**Not there yet (targets for upcoming releases):** clustered / HA deployment; **backup/restore** CLI paths (API returns “not implemented”); **IVF** index type; CPU **SIMD intrinsics** (chunked Go math exists in `[pkg/core/simd.go](pkg/core/simd.go)`); full **compaction** / WAL replay polish; recall metrics inside `pkg/index.RunBenchmark`.
 
 Track **[GitHub Releases](https://github.com/antonellof/VittoriaDB/releases)** — **[v0.6.0](RELEASE_NOTES_v0.6.0.md)** is the current baseline.
 
@@ -660,6 +651,7 @@ Track **[GitHub Releases](https://github.com/antonellof/VittoriaDB/releases)** �
 - **Network**: Port 8080 (configurable)
 
 ### Development Requirements
+
 - **Go**: Version 1.21+ (for building from source)
 - **Python**: Version 3.7+ (for Python client)
 
@@ -667,17 +659,20 @@ Track **[GitHub Releases](https://github.com/antonellof/VittoriaDB/releases)** �
 
 VittoriaDB provides cross-platform binaries for all major platforms:
 
-| Platform | Architecture | Status |
-|----------|-------------|---------|
-| **Linux** | AMD64/ARM64 | ✅ Available |
-| **macOS** | Intel/Apple Silicon | ✅ Available |
-| **Windows** | AMD64 | ✅ Available |
+
+| Platform    | Architecture        | Status      |
+| ----------- | ------------------- | ----------- |
+| **Linux**   | AMD64/ARM64         | ✅ Available |
+| **macOS**   | Intel/Apple Silicon | ✅ Available |
+| **Windows** | AMD64               | ✅ Available |
+
 
 All releases are automatically built and published to [GitHub Releases](https://github.com/antonellof/VittoriaDB/releases) with checksums and automated builds via GitHub Actions.
 
 ## 🧪 Development
 
 ### Building from Source
+
 ```bash
 # Clone and build
 git clone https://github.com/antonellof/VittoriaDB.git
@@ -689,6 +684,7 @@ cd sdk/python && ./install-dev.sh
 ```
 
 ### Testing
+
 ```bash
 # Run Go tests (library packages — excludes multi-main example programs under examples/go)
 go test ./pkg/... ./cmd/... -v
@@ -708,6 +704,7 @@ curl http://localhost:8080/health
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Quick Start for Contributors
+
 1. Fork and clone the repository
 2. Install Go 1.21+ and Python 3.7+
 3. Create a feature branch
@@ -718,13 +715,14 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## 📞 Support
 
-- **📖 Documentation**: Complete guides in [`docs/`](docs/) directory
+- **📖 Documentation**: Complete guides in `[docs/](docs/)` directory
 - **🐛 Issues**: [GitHub Issues](https://github.com/antonellof/VittoriaDB/issues)
 - **💬 Discussions**: [GitHub Discussions](https://github.com/antonellof/VittoriaDB/discussions)
 - **📦 Releases**: [GitHub Releases](https://github.com/antonellof/VittoriaDB/releases)
 
 ### Getting Help
-1. Check the documentation in [`docs/`](docs/)
+
+1. Check the documentation in `[docs/](docs/)`
 2. Search existing issues
 3. Create an issue for bugs or feature requests
 4. Start a discussion for questions
@@ -735,13 +733,12 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-<div align="center">
+
 
 **🚀 VittoriaDB - Making Vector Databases Local and Simple**
 
 *Built with ❤️ for the AI community*
 
-[![GitHub Stars](https://img.shields.io/github/stars/antonellof/VittoriaDB?style=social)](https://github.com/antonellof/VittoriaDB)
-[![GitHub Forks](https://img.shields.io/github/forks/antonellof/VittoriaDB?style=social)](https://github.com/antonellof/VittoriaDB)
+[GitHub Stars](https://github.com/antonellof/VittoriaDB)
+[GitHub Forks](https://github.com/antonellof/VittoriaDB)
 
-</div>

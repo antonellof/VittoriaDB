@@ -47,7 +47,16 @@ func CreateIndex(indexType IndexType, dimensions int, metric DistanceMetric, con
 		return NewHNSWIndex(dimensions, metric, hnswConfig), nil
 
 	case IndexTypeIVF:
-		return nil, fmt.Errorf("IVF index not implemented yet")
+		ivfCfg := DefaultIVFConfig()
+		if config != nil {
+			if nl, ok := config["nlist"].(int); ok && nl > 0 {
+				ivfCfg.NList = nl
+			}
+			if np, ok := config["nprobe"].(int); ok && np > 0 {
+				ivfCfg.NProbe = np
+			}
+		}
+		return NewIVFFlatIndex(dimensions, metric, ivfCfg), nil
 
 	default:
 		return nil, fmt.Errorf("unknown index type: %s", indexType.String())
@@ -163,8 +172,15 @@ func EstimateMemoryUsage(indexType IndexType, dimensions int, vectorCount int, c
 		return vectorMemory + connectionMemory + int64(vectorCount)*128 // 128 bytes overhead per node
 
 	case IndexTypeIVF:
-		// IVF not implemented yet
-		return vectorMemory
+		nlist := 16
+		if config != nil {
+			if nl, ok := config["nlist"].(int); ok && nl > 0 {
+				nlist = nl
+			}
+		}
+		centroidMem := int64(nlist) * int64(dimensions) * 4
+		// Per-vector ID in one list slot + centroid assignment bookkeeping (rough)
+		return vectorMemory + centroidMem + int64(vectorCount)*48
 
 	default:
 		return vectorMemory

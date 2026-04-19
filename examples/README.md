@@ -15,11 +15,38 @@ examples/
 └── README.md       # This file
 ```
 
+### Operations (backup, metrics, filters, IVF)
+
+These capabilities complement the tutorial scripts:
+
+- **Backup / restore**: Use the `vittoriadb` CLI (not HTTP). Stop the server before restore. Example: `./vittoriadb backup --data-dir ./data --output ./backup.tar.gz` and `./vittoriadb restore --data-dir ./restored --input ./backup.tar.gz`.
+- **Prometheus**: `GET /metrics` exposes search counters, mean latency, and approximate QPS since process start.
+- **Metadata filters**: Search accepts a **flat map** (`{"category": "tech"}`) or a **structured** filter tree; see `examples/python/15_observability_metrics_ivf.py` for both and for `Collection.search(..., use_post=True)`.
+- **IVF index**: Collection field `index_type` / `IndexType.IVF` with `config` keys `nlist` and `nprobe` (prototype). Helper in Python: `Configure.Index.ivf_flat(...)`.
+
 ## 🐍 Python Examples (`python/`)
 
 The Python examples are organized in a logical progression from basic manual vector operations to advanced external service embedding features. Each file demonstrates different vectorization approaches following industry best practices.
 
 ### 📚 Learning Path (Recommended Order)
+
+#### 15. Observability and IVF (metrics, filters, IVF index)
+**File:** `15_observability_metrics_ivf.py`
+
+Prometheus `/metrics`, `/stats` query fields, IVF collection creation, and metadata filters (flat map vs structured body via POST search).
+
+**Usage:**
+```bash
+# With server: ./vittoriadb run --data-dir ./data
+python examples/python/15_observability_metrics_ivf.py
+```
+
+**Features:**
+- IVF index with `Configure.Index.ivf_flat`
+- Flat and structured metadata filters
+- `db.prometheus_metrics()` and search-related stats
+
+---
 
 #### 00. Basic Manual Vector Operations
 **File:** `00_basic_usage_manual_vectors.py`
@@ -754,10 +781,10 @@ The manual vector generation creates vectors that are too similar (0.99+ scores 
 **File:** `curl/basic_usage.sh`
 
 Complete HTTP API demonstration using bash and cURL:
-- Connection testing and health checks
+- Connection testing, health checks, **`GET /metrics`** (Prometheus text)
 - Collection creation and management
 - Individual and batch vector operations
-- Similarity search with filtering
+- Similarity search with filtering (flat `filter` objects in JSON bodies)
 - Performance comparison and analysis
 - Comprehensive error handling
 
