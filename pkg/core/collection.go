@@ -559,9 +559,7 @@ func (c *VittoriaCollection) calculateSimilarity(a, b []float32) float32 {
 
 // matchesFilter checks if metadata matches the filter
 func (c *VittoriaCollection) matchesFilter(metadata map[string]interface{}, filter *Filter) bool {
-	// TODO: Implement proper filter matching
-	// For now, return true (no filtering)
-	return true
+	return evalMetadataFilter(metadata, filter)
 }
 
 // sortCandidates sorts search results by score (descending)

@@ -214,7 +214,7 @@ type CollectionStats struct {
 	VectorCount  int64     `json:"vector_count"`
 	Dimensions   int       `json:"dimensions"`
 	IndexType    IndexType `json:"index_type"`
-	IndexSize    int64     `json:"index_size"`
+	IndexSize    int64     `json:"index_size"` // On-disk footprint of the collection directory (bytes)
 	LastModified time.Time `json:"last_modified"`
 }
 

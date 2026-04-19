@@ -8,7 +8,7 @@
 
 **VittoriaDB** is a high-performance, embedded vector database designed for local AI development and production deployments. Built with simplicity and performance in mind, it provides a zero-configuration solution for vector similarity search, perfect for RAG applications, semantic search, and AI prototyping.
 
-**🆕 NEW in v0.5.0:** Unified configuration system, I/O optimization with up to 276x speedup, parallel search engine, and smart chunking for production-ready AI applications!
+**Latest — v0.6.0:** Hugging Face Inference API embeddings (fully wired), reproducible [`pkg/index`](pkg/index/) benchmarks (`go test -bench`), metadata **search filters** (`eq`, `and`/`or`/`not`, `in`, comparisons), disk usage on `/health` & `/stats`, Python SDK fixes for `/documents` uploads — see **[RELEASE_NOTES_v0.6.0.md](RELEASE_NOTES_v0.6.0.md)**.
 
 ## 🎯 Why VittoriaDB?
 
@@ -18,7 +18,7 @@
 
 ## ✨ Key Features
 
-### 🌐 **Complete RAG Web Application (Enhanced in v0.5.0)**
+### 🌐 **Complete RAG Web Application**
 - **💬 ChatGPT-like Interface**: Modern web UI with real-time streaming responses
 - **📁 Multi-Format Document Processing**: PDF, DOCX, TXT, MD, HTML support
 - **🌐 Intelligent Web Research**: Real-time search with automatic knowledge storage
@@ -41,7 +41,7 @@
 - **📦 Single Binary**: No dependencies, cross-platform support
 - **🔒 Local First**: Keep your data private and secure
 
-### 🚀 **NEW in v0.5.0: Performance & Configuration Revolution**
+### 🚀 **Performance & configuration**
 - **🔧 Unified Configuration**: YAML, environment variables, CLI flags with intelligent precedence
 - **⚡ I/O Optimization**: Memory-mapped storage, async I/O, and chunked vector ops (up to 276x speedup on indexed reads)
 - **🔄 Parallel Search**: Configurable worker pools with 5-32x performance improvements
@@ -74,11 +74,11 @@ curl -fsSL https://raw.githubusercontent.com/antonellof/VittoriaDB/main/scripts/
 
 ### Manual Installation
 ```bash
-# Download for your platform from GitHub Releases
-wget https://github.com/antonellof/VittoriaDB/releases/download/v0.5.0/vittoriadb-v0.5.0-linux-amd64.tar.gz
-tar -xzf vittoriadb-v0.5.0-linux-amd64.tar.gz
-chmod +x vittoriadb-v0.5.0-linux-amd64
-./vittoriadb-v0.5.0-linux-amd64 run
+# Download for your platform from GitHub Releases (replace tag if needed)
+wget https://github.com/antonellof/VittoriaDB/releases/download/v0.6.0/vittoriadb-v0.6.0-linux-amd64.tar.gz
+tar -xzf vittoriadb-v0.6.0-linux-amd64.tar.gz
+chmod +x vittoriadb-v0.6.0-linux-amd64
+./vittoriadb-v0.6.0-linux-amd64 run
 ```
 
 ### 🌐 Web UI RAG Application (NEW!)
@@ -384,25 +384,31 @@ The [`examples/`](examples/) directory contains comprehensive examples organized
 ./vittoriadb run
 
 # Run examples
-python examples/python/rag_complete_example.py
-cd examples/go && go run basic_usage.go
-cd examples/curl && ./basic_usage.sh
+python examples/python/07_rag_complete_workflow.py
+cd examples/go && go run 01_http_client_basic_usage.go
+cd examples/curl && chmod +x basic_usage.sh && ./basic_usage.sh
 ```
 
 > 📖 **See [examples/README.md](examples/README.md) for complete documentation and requirements.**
 
 ### Go Library Example
 ```go
-import "github.com/antonellof/VittoriaDB/pkg/core"
+import (
+  "context"
+  "github.com/antonellof/VittoriaDB/pkg/core"
+)
 
-// Create database and collection
+ctx := context.Background()
 db := core.NewDatabase()
-db.Open(ctx, &core.Config{DataDir: "./my-vectors"})
+_ = db.Open(ctx, &core.Config{DataDir: "./my-vectors"})
+_ = db.CreateCollection(ctx, &core.CreateCollectionRequest{
+    Name: "docs", Dimensions: 4, Metric: core.DistanceMetricCosine,
+})
 
-// Insert and search vectors
-collection.Insert(ctx, &core.Vector{
-    ID: "doc1", 
-    Vector: []float32{0.1, 0.2, 0.3, 0.4},
+col, _ := db.GetCollection(ctx, "docs")
+_, _ = col.Insert(ctx, &core.Vector{
+    ID:       "doc1",
+    Vector:   []float32{0.1, 0.2, 0.3, 0.4},
     Metadata: map[string]interface{}{"title": "My Document"},
 })
 ```
@@ -519,26 +525,27 @@ curl http://localhost:8080/config
 
 ## 🎯 Performance
 
-### Benchmarks (v0.5.0)
-- **Insert Speed**: >15,000 vectors/second (improved from 10,000 with batch processing)
-- **Search Speed**: Sub-100 microsecond search times for cached results (improved from 1ms)
-- **Memory Usage**: 40% reduction with memory-mapped storage
-- **Parallel Search**: 5-32x speedup for large datasets
-- **I/O Optimization**: Up to 276x speedup with combined optimizations
-- **Vectorized Math**: Up to 7.7x speedup for batched vector ops via chunked Go implementations (true CPU SIMD intrinsics planned)
-- **Startup Time**: <100ms cold start
-- **Binary Size**: ~10MB compressed
+### Reproducible benchmarks (v0.6.0)
 
-### Comprehensive Performance Results
-📊 **[View Complete Benchmark Results](https://gist.github.com/antonellof/19069bb56573fcf72ce592b3c2f2fc74)** - Detailed performance testing with Native Go SDK integration
+Checked-in suite — run locally:
 
-**Key Highlights:**
-- **Peak Insert Rate**: 2,645,209 vectors/sec
-- **Peak Search Rate**: 1,266.72 searches/sec  
-- **Lowest Latency**: 789.44µs
-- **Large-Scale Performance**: 1,685,330 vectors/sec for 87.89 MB dataset
+```bash
+go test -bench=. -benchmem -benchtime=3s -run=^$ ./pkg/index/
+```
 
-> 📖 **See [Performance Guide](docs/performance.md) for detailed benchmarks, optimization tips, and scaling characteristics.**
+On Apple M2 Pro (384-D, cosine, default HNSW): **~7k searches/sec** at 10k vectors; flat brute-force baseline ~187/sec (see **[docs/performance.md](docs/performance.md)** for methodology and comparison with Qdrant / Milvus / Weaviate).
+
+### Historical / workload-specific numbers
+
+📊 **[Gist: extended benchmark runs](https://gist.github.com/antonellof/19069bb56573fcf72ce592b3c2f2fc74)** — batched ingestion and synthetic workloads (not identical to `go test -bench` above).
+
+**High-water marks from that suite (environment-specific):**
+
+- Peak batch insert throughput into the native index path (best case)
+- Peak search throughput under cache-friendly conditions
+- Large blob ingest scenarios
+
+> 📖 **See [Performance Guide](docs/performance.md)** for reproducible numbers, tuning, and competitor context.
 
 ## 🔧 Configuration
 
@@ -637,6 +644,14 @@ vittoriadb run --config vittoriadb.yaml --port 9090
 
 > 📖 **See [CLI Reference](docs/cli.md) for complete command documentation, options, and environment variables.**
 
+## 🧭 Scope, limitations & roadmap
+
+**Works great today:** single-node, embedded-style deployments; RAG demos; REST + Python SDK; HNSW + flat indexes; WAL-backed storage; **[metadata filters](docs/api.md)** on search (equality, numeric compare, `and`/`or`/`not`, tag-style `in`, `contains`, `exists`).
+
+**Not there yet (targets for upcoming releases):** clustered / HA deployment; **backup/restore** CLI paths (API returns “not implemented”); **IVF** index type; CPU **SIMD intrinsics** (chunked Go math exists in [`pkg/core/simd.go`](pkg/core/simd.go)); full **compaction** / WAL replay polish; recall metrics inside `pkg/index.RunBenchmark`.
+
+Track **[GitHub Releases](https://github.com/antonellof/VittoriaDB/releases)** — **[v0.6.0](RELEASE_NOTES_v0.6.0.md)** is the current baseline.
+
 ## 📋 System Requirements
 
 - **Operating System**: Linux, macOS, or Windows
@@ -675,8 +690,8 @@ cd sdk/python && ./install-dev.sh
 
 ### Testing
 ```bash
-# Run Go tests
-go test ./... -v
+# Run Go tests (library packages — excludes multi-main example programs under examples/go)
+go test ./pkg/... ./cmd/... -v
 
 # Run Python tests
 cd sdk/python && python -m pytest tests/ -v

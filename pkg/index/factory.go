@@ -1,7 +1,12 @@
 package index
 
 import (
+	"context"
 	"fmt"
+	"math"
+	"math/rand"
+	"sort"
+	"time"
 )
 
 // CreateIndex creates an index of the specified type
@@ -187,17 +192,111 @@ type BenchmarkResult struct {
 	QPS             float64          `json:"qps"`
 }
 
-// RunBenchmark runs a benchmark with the given configuration
+// RunBenchmark builds an index with synthetic random unit vectors, runs search
+// queries, and returns timing statistics. Recall is not computed (left at 0).
 func RunBenchmark(config *BenchmarkConfig) (*BenchmarkResult, error) {
-	// This would implement a comprehensive benchmark
-	// For now, return a placeholder
+	if config == nil {
+		return nil, fmt.Errorf("benchmark config is nil")
+	}
+	if config.VectorCount <= 0 || config.Dimensions <= 0 {
+		return nil, fmt.Errorf("vector_count and dimensions must be positive")
+	}
+
+	idx, err := CreateIndex(config.IndexType, config.Dimensions, DistanceMetricCosine, config.Config)
+	if err != nil {
+		return nil, err
+	}
+
+	seed := int64(42)
+	if config.Config != nil {
+		if s, ok := config.Config["seed"].(int64); ok {
+			seed = s
+		}
+	}
+	r := rand.New(rand.NewSource(seed))
+
+	vectors := make([]*IndexVector, config.VectorCount)
+	for i := 0; i < config.VectorCount; i++ {
+		v := make([]float32, config.Dimensions)
+		var norm float32
+		for j := 0; j < config.Dimensions; j++ {
+			x := r.Float32()*2 - 1
+			v[j] = x
+			norm += x * x
+		}
+		if norm > 0 {
+			inv := float32(1.0 / math.Sqrt(float64(norm)))
+			for j := range v {
+				v[j] *= inv
+			}
+		}
+		vectors[i] = &IndexVector{ID: fmt.Sprintf("bench-%d", i), Vector: v}
+	}
+
+	buildStart := time.Now()
+	if err := idx.Build(vectors); err != nil {
+		return nil, err
+	}
+	buildMs := time.Since(buildStart).Milliseconds()
+
+	q := config.QueryCount
+	if q <= 0 {
+		q = 100
+	}
+	k := config.K
+	if k <= 0 {
+		k = 10
+	}
+
+	ctx := context.Background()
+	latencies := make([]time.Duration, 0, q)
+	var searchTotal time.Duration
+	queryRand := rand.New(rand.NewSource(seed + 1))
+
+	for i := 0; i < q; i++ {
+		qv := make([]float32, config.Dimensions)
+		var norm float32
+		for j := 0; j < config.Dimensions; j++ {
+			x := queryRand.Float32()*2 - 1
+			qv[j] = x
+			norm += x * x
+		}
+		if norm > 0 {
+			inv := float32(1.0 / math.Sqrt(float64(norm)))
+			for j := range qv {
+				qv[j] *= inv
+			}
+		}
+		t0 := time.Now()
+		if _, err := idx.Search(ctx, qv, k, &SearchParams{}); err != nil {
+			return nil, err
+		}
+		d := time.Since(t0)
+		latencies = append(latencies, d)
+		searchTotal += d
+	}
+
+	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
+	p99Idx := (len(latencies) * 99 / 100)
+	if p99Idx >= len(latencies) {
+		p99Idx = len(latencies) - 1
+	}
+	p99Ms := float64(latencies[p99Idx]) / float64(time.Millisecond)
+	avgMs := float64(searchTotal) / float64(q) / float64(time.Millisecond)
+	qps := float64(q) / searchTotal.Seconds()
+
+	memMB := 0.0
+	if st := idx.Stats(); st != nil && st.MemoryUsage > 0 {
+		memMB = float64(st.MemoryUsage) / (1024 * 1024)
+	}
+
 	return &BenchmarkResult{
 		Config:          config,
-		BuildTimeMS:     1000,
-		MemoryUsageMB:   100.0,
-		AvgSearchTimeMS: 1.0,
-		P99SearchTimeMS: 5.0,
-		RecallAt10:      0.95,
-		QPS:             1000.0,
+		BuildTimeMS:     buildMs,
+		MemoryUsageMB:   memMB,
+		AvgSearchTimeMS: avgMs,
+		P99SearchTimeMS: p99Ms,
+		RecallAt10:      0,
+		QPS:             qps,
 	}, nil
 }

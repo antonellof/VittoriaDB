@@ -6,11 +6,27 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/antonellof/VittoriaDB/pkg/embeddings"
 )
+
+// dirByteSize returns the sum of regular file sizes under root (recursive).
+func dirByteSize(root string) int64 {
+	var n int64
+	_ = filepath.Walk(root, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info != nil && !info.IsDir() {
+			n += info.Size()
+		}
+		return nil
+	})
+	return n
+}
 
 // VittoriaDB implements the Database interface
 type VittoriaDB struct {
@@ -88,13 +104,17 @@ func (db *VittoriaDB) Health() *HealthStatus {
 		}
 	}
 
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	disk := dirByteSize(db.dataDir)
+
 	return &HealthStatus{
 		Status:       "healthy",
 		Uptime:       int64(time.Since(db.startTime).Seconds()),
 		Collections:  len(db.collections),
 		TotalVectors: totalVectors,
-		MemoryUsage:  0, // TODO: Implement memory usage calculation
-		DiskUsage:    0, // TODO: Implement disk usage calculation
+		MemoryUsage:  int64(ms.Alloc),
+		DiskUsage:    disk,
 	}
 }
 
@@ -229,17 +249,27 @@ func (db *VittoriaDB) Stats(ctx context.Context) (*DatabaseStats, error) {
 			return nil, fmt.Errorf("failed to get collection count: %w", err)
 		}
 
+		info, err := collection.Info()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get collection info: %w", err)
+		}
+
+		colDir := filepath.Join(db.dataDir, collection.Name())
+		onDisk := dirByteSize(colDir)
+
 		stats := &CollectionStats{
 			Name:         collection.Name(),
 			VectorCount:  count,
 			Dimensions:   collection.Dimensions(),
 			IndexType:    collection.indexType,
-			IndexSize:    0,          // TODO: Implement index size calculation
-			LastModified: time.Now(), // TODO: Implement last modified tracking
+			IndexSize:    onDisk,
+			LastModified: info.Modified,
 		}
 
 		collectionStats = append(collectionStats, stats)
 		totalVectors += count
+		totalSize += onDisk
+		indexSize += onDisk
 	}
 
 	return &DatabaseStats{
