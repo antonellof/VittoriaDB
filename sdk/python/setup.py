@@ -23,24 +23,34 @@ class PostInstallCommand(install):
         system = platform.system().lower()
         machine = platform.machine().lower()
         
-        # Determine binary name
+        pkg_ver = read_version()
+        release_tag = f"v{pkg_ver}"
+        # Asset names match scripts/build-releases.sh: vittoriadb-<tag>-<GOOS>-<GOARCH>[.exe]
+        if system == "darwin":
+            arch = "arm64" if machine == "arm64" else "amd64"
+            asset_name = f"vittoriadb-{release_tag}-darwin-{arch}"
+        elif system == "linux":
+            arch = "arm64" if machine in ("aarch64", "arm64") else "amd64"
+            asset_name = f"vittoriadb-{release_tag}-linux-{arch}"
+        elif system == "windows":
+            asset_name = f"vittoriadb-{release_tag}-windows-amd64.exe"
+        else:
+            print(f"Warning: Unsupported platform {system}-{machine}")
+            return
+        
+        # Download URL (GitHub releases)
+        url = f"https://github.com/antonellof/VittoriaDB/releases/download/{release_tag}/{asset_name}"
+        
+        # Local path (keep short names so client code can find them)
         if system == "darwin":
             arch = "arm64" if machine == "arm64" else "amd64"
             binary_name = f"vittoriadb-darwin-{arch}"
         elif system == "linux":
             arch = "arm64" if machine in ("aarch64", "arm64") else "amd64"
             binary_name = f"vittoriadb-linux-{arch}"
-        elif system == "windows":
-            binary_name = "vittoriadb-windows-amd64.exe"
         else:
-            print(f"Warning: Unsupported platform {system}-{machine}")
-            return
-        
-        # Download URL (GitHub releases)
-        version = "v0.6.0"
-        url = f"https://github.com/antonellof/VittoriaDB/releases/download/{version}/{binary_name}"
-        
-        # Local path
+            binary_name = "vittoriadb-windows-amd64.exe"
+
         package_dir = os.path.join(self.install_lib, "vittoriadb")
         binary_dir = os.path.join(package_dir, "binaries")
         os.makedirs(binary_dir, exist_ok=True)
