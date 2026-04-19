@@ -550,7 +550,7 @@ class Collection:
             
             response = self.client._make_request(
                 "POST",
-                f"/collections/{self.name}/upload",
+                f"/collections/{self.name}/documents",
                 files=files,
                 data=data
             )
@@ -584,27 +584,27 @@ class Collection:
     def process_text(self,
                      text: str,
                      chunk_size: int = 500,
-                     overlap: int = 50,
-                     metadata: Optional[Dict[str, Any]] = None,
-                     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2") -> Dict[str, Any]:
-        """Process raw text into vectors."""
-        # For now, we'll create a temporary file and upload it
-        # In the future, we can add a direct text processing endpoint
+                     chunk_overlap: int = 50,
+                     metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Process raw text into vectors by uploading it as a temporary .txt file.
+
+        For long-running workflows prefer :meth:`insert_text` /
+        :meth:`insert_text_batch`, which round-trip through the dedicated
+        ``/text`` endpoints without touching the filesystem.
+        """
         import tempfile
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
             f.write(text)
             temp_path = f.name
-        
+
         try:
-            result = self.upload_file(
+            return self.upload_file(
                 temp_path,
                 chunk_size=chunk_size,
-                overlap=overlap,
+                chunk_overlap=chunk_overlap,
                 metadata=metadata,
-                embedding_model=embedding_model
             )
-            return result
         finally:
             os.unlink(temp_path)
 
@@ -615,29 +615,6 @@ def connect(url: Optional[str] = None, **kwargs) -> VittoriaDB:
     return VittoriaDB(url, **kwargs)
 
 
-def embed(data_dir: str) -> VittoriaDB:
-    """Create embedded VittoriaDB instance (future feature)."""
-    raise NotImplementedError("Embedded mode coming in v0.2")
-
-
-# Utility functions
 def supported_formats() -> List[str]:
-    """Get list of supported file formats."""
-    return [".pdf", ".docx", ".doc", ".txt", ".md", ".html", ".htm", ".rtf"]
-
-
-def available_models() -> List[str]:
-    """Get list of available embedding models."""
-    return [
-        "sentence-transformers/all-MiniLM-L6-v2",
-        "sentence-transformers/all-mpnet-base-v2",
-        "sentence-transformers/distilbert-base-nli-stsb-mean-tokens",
-        "openai/text-embedding-ada-002"
-    ]
-
-
-def extract_text(file_path: str) -> str:
-    """Extract text from file without uploading."""
-    # This would require implementing text extraction locally
-    # For now, raise NotImplementedError
-    raise NotImplementedError("Local text extraction coming in v0.2")
+    """Get list of file formats supported by the server's document processors."""
+    return [".pdf", ".docx", ".doc", ".txt", ".text", ".md", ".markdown", ".html", ".htm"]

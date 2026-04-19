@@ -43,7 +43,7 @@
 
 ### 🚀 **NEW in v0.5.0: Performance & Configuration Revolution**
 - **🔧 Unified Configuration**: YAML, environment variables, CLI flags with intelligent precedence
-- **⚡ I/O Optimization**: Memory-mapped storage, SIMD operations, async I/O (up to 276x speedup)
+- **⚡ I/O Optimization**: Memory-mapped storage, async I/O, and chunked vector ops (up to 276x speedup on indexed reads)
 - **🔄 Parallel Search**: Configurable worker pools with 5-32x performance improvements
 - **🧠 Smart Chunking**: Sentence-aware text segmentation with abbreviation handling
 - **🔧 Enhanced Batch Processing**: Intelligent error recovery and fallback mechanisms
@@ -87,8 +87,11 @@ chmod +x vittoriadb-v0.5.0-linux-amd64
 git clone https://github.com/antonellof/VittoriaDB.git
 cd VittoriaDB/examples/web-ui-rag
 
-# Start the complete RAG application
-./start.sh
+# Start the complete RAG application (development mode)
+./run-dev.sh
+
+# Or run with Docker Compose
+./docker-start.sh
 
 # Access the ChatGPT-like interface
 open http://localhost:3000
@@ -522,7 +525,7 @@ curl http://localhost:8080/config
 - **Memory Usage**: 40% reduction with memory-mapped storage
 - **Parallel Search**: 5-32x speedup for large datasets
 - **I/O Optimization**: Up to 276x speedup with combined optimizations
-- **SIMD Operations**: Up to 7.7x speedup for vector processing
+- **Vectorized Math**: Up to 7.7x speedup for batched vector ops via chunked Go implementations (true CPU SIMD intrinsics planned)
 - **Startup Time**: <100ms cold start
 - **Binary Size**: ~10MB compressed
 

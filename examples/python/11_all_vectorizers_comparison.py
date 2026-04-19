@@ -50,13 +50,21 @@ def main():
     print("Testing all external service vectorizers following industry patterns")
     print()
     
-    # Test configurations
+    import os
+
+    hf_token = os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_TOKEN")
+    openai_token = os.getenv("OPENAI_API_KEY", "dummy_key")
+
     vectorizers = [
         ("Ollama Local", Configure.Vectors.ollama_embeddings(), "needs_ollama"),
         ("auto_embeddings", Configure.Vectors.auto_embeddings(), "needs_ollama"),
         ("Sentence Transformers", Configure.Vectors.sentence_transformers(), "needs_python"),
-        ("OpenAI", Configure.Vectors.openai_embeddings(api_key="dummy_key"), "needs_api_key"),
-        ("HuggingFace", Configure.Vectors.huggingface_embeddings(api_key="dummy_key"), "needs_api_key"),
+        ("OpenAI", Configure.Vectors.openai_embeddings(api_key=openai_token), "needs_api_key"),
+        # HuggingFace Inference API client is implemented in v0.6.0; an
+        # API token is optional but strongly recommended to avoid heavy
+        # rate limiting on the free tier.
+        ("HuggingFace", Configure.Vectors.huggingface_embeddings(api_key=hf_token or ""),
+         "needs_api_key" if not hf_token else "working"),
     ]
     
     results = {}

@@ -940,10 +940,11 @@ func (s *Server) handleDocumentUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Insert document chunks as vectors (placeholder - would need embedding generation)
+	// Insert document chunks as vectors. If the collection has a vectorizer
+	// configured, chunks are automatically embedded; otherwise they are stored
+	// as zero vectors (the caller is expected to update them later).
 	var insertedChunks []string
 	for _, chunk := range doc.Chunks {
-		// Use automatic text vectorization if collection has vectorizer
 		if collection.HasVectorizer() {
 			// Create TextVector for automatic embedding generation
 			textVector := &core.TextVector{
@@ -968,10 +969,17 @@ func (s *Server) handleDocumentUpload(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 		} else {
-			// Fallback to placeholder vector for collections without vectorizer
+			// Collection has no vectorizer: store the chunk text and metadata
+			// with a zero vector matching the collection's dimensions. The
+			// client is expected to overwrite the vector via the standard
+			// /vectors endpoint once it has computed an embedding.
+			dims := collection.Dimensions()
+			if dims <= 0 {
+				dims = 384
+			}
 			vector := &core.Vector{
 				ID:     chunk.ID,
-				Vector: make([]float32, 384), // Placeholder vector
+				Vector: make([]float32, dims),
 				Metadata: map[string]interface{}{
 					"document_id":    doc.ID,
 					"document_title": doc.Title,

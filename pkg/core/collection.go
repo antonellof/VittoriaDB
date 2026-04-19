@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -393,7 +395,8 @@ func (c *VittoriaCollection) legacySearch(ctx context.Context, req *SearchReques
 		return nil, err
 	}
 
-	// Perform brute force search for now (will be optimized with proper indexing)
+	// Sequential brute-force fallback used when ParallelSearchEngine is unavailable.
+	// The optimized parallel path lives in pkg/core/parallel_search.go.
 	candidates := make([]*SearchResult, 0, len(c.vectors))
 
 	for _, vector := range c.vectors {
@@ -563,15 +566,9 @@ func (c *VittoriaCollection) matchesFilter(metadata map[string]interface{}, filt
 
 // sortCandidates sorts search results by score (descending)
 func (c *VittoriaCollection) sortCandidates(candidates []*SearchResult) {
-	// Simple bubble sort for now (will be optimized)
-	n := len(candidates)
-	for i := 0; i < n-1; i++ {
-		for j := 0; j < n-i-1; j++ {
-			if candidates[j].Score < candidates[j+1].Score {
-				candidates[j], candidates[j+1] = candidates[j+1], candidates[j]
-			}
-		}
-	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Score > candidates[j].Score
+	})
 }
 
 // saveMetadata saves collection metadata to disk
@@ -625,21 +622,19 @@ func (c *VittoriaCollection) loadVectors() error {
 	return json.Unmarshal(data, &c.vectors)
 }
 
-// Distance calculation functions
+// Distance calculation functions used by the legacy fallback search.
+// Optimized batched implementations live in pkg/core/simd.go (SIMDVectorOps).
 func cosineSimilarity(a, b []float32) float32 {
-	var dotProduct, normA, normB float32
-
+	var dot, normA, normB float32
 	for i := 0; i < len(a); i++ {
-		dotProduct += a[i] * b[i]
+		dot += a[i] * b[i]
 		normA += a[i] * a[i]
 		normB += b[i] * b[i]
 	}
-
 	if normA == 0 || normB == 0 {
 		return 0
 	}
-
-	return dotProduct / (float32(sqrt(float64(normA))) * float32(sqrt(float64(normB))))
+	return dot / (float32(math.Sqrt(float64(normA))) * float32(math.Sqrt(float64(normB))))
 }
 
 func euclideanDistance(a, b []float32) float32 {
@@ -648,7 +643,7 @@ func euclideanDistance(a, b []float32) float32 {
 		diff := a[i] - b[i]
 		sum += diff * diff
 	}
-	return float32(sqrt(float64(sum)))
+	return float32(math.Sqrt(float64(sum)))
 }
 
 func dotProduct(a, b []float32) float32 {
@@ -662,26 +657,13 @@ func dotProduct(a, b []float32) float32 {
 func manhattanDistance(a, b []float32) float32 {
 	var sum float32
 	for i := 0; i < len(a); i++ {
-		if a[i] > b[i] {
-			sum += a[i] - b[i]
-		} else {
-			sum += b[i] - a[i]
+		diff := a[i] - b[i]
+		if diff < 0 {
+			diff = -diff
 		}
+		sum += diff
 	}
 	return sum
-}
-
-// sqrt is a simple square root implementation
-func sqrt(x float64) float64 {
-	if x == 0 {
-		return 0
-	}
-
-	z := x
-	for i := 0; i < 10; i++ {
-		z = (z + x/z) / 2
-	}
-	return z
 }
 
 // InsertText inserts text that will be automatically vectorized
@@ -708,19 +690,11 @@ func (c *VittoriaCollection) InsertText(ctx context.Context, textVector *TextVec
 
 	// Store original content if content storage is enabled
 	if c.contentStorage != nil && c.contentStorage.Enabled {
-		// Check content size limits
 		if c.contentStorage.MaxSize > 0 && int64(len(textVector.Text)) > c.contentStorage.MaxSize {
 			return fmt.Errorf("content size (%d bytes) exceeds maximum allowed size (%d bytes)", len(textVector.Text), c.contentStorage.MaxSize)
 		}
-
-		// Store content (with optional compression in future)
-		contentToStore := textVector.Text
-		if c.contentStorage.Compressed {
-			// TODO: Implement compression if needed
-			// For now, store as-is
-		}
-
-		metadata[c.contentStorage.FieldName] = contentToStore
+		// Compression is configurable but currently a no-op; content is stored verbatim.
+		metadata[c.contentStorage.FieldName] = textVector.Text
 	}
 
 	// Create vector and insert
@@ -766,19 +740,11 @@ func (c *VittoriaCollection) InsertTextBatch(ctx context.Context, textVectors []
 
 		// Store original content if content storage is enabled
 		if c.contentStorage != nil && c.contentStorage.Enabled {
-			// Check content size limits
 			if c.contentStorage.MaxSize > 0 && int64(len(tv.Text)) > c.contentStorage.MaxSize {
 				return fmt.Errorf("content size (%d bytes) exceeds maximum allowed size (%d bytes) for vector %s", len(tv.Text), c.contentStorage.MaxSize, tv.ID)
 			}
-
-			// Store content (with optional compression in future)
-			contentToStore := tv.Text
-			if c.contentStorage.Compressed {
-				// TODO: Implement compression if needed
-				// For now, store as-is
-			}
-
-			metadata[c.contentStorage.FieldName] = contentToStore
+			// Compression is configurable but currently a no-op; content is stored verbatim.
+			metadata[c.contentStorage.FieldName] = tv.Text
 		}
 
 		vectors[i] = &Vector{

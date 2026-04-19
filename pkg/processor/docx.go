@@ -13,7 +13,8 @@ import (
 	"time"
 )
 
-// DOCXProcessor handles DOCX (Word) documents using github.com/fumiama/go-docx
+// DOCXProcessor handles DOCX (Word) documents by parsing the underlying
+// Office Open XML zip archive (word/document.xml + docProps/core.xml).
 type DOCXProcessor struct {
 	chunker ChunkingStrategy
 }
@@ -44,7 +45,7 @@ func (p *DOCXProcessor) ProcessDocument(reader io.Reader, filename string, confi
 		return nil, fmt.Errorf("failed to read DOCX document: %w", err)
 	}
 
-	// Extract text from DOCX (placeholder implementation)
+	// Extract text from DOCX via the standard ZIP/XML structure
 	text, err := p.ExtractText(strings.NewReader(string(content)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract text from DOCX: %w", err)
@@ -79,7 +80,6 @@ func (p *DOCXProcessor) ProcessDocument(reader io.Reader, filename string, confi
 	doc.Metadata["char_count"] = fmt.Sprintf("%d", len(text))
 	doc.Metadata["docx_size"] = fmt.Sprintf("%d", len(content))
 
-	// Extract DOCX-specific metadata (placeholder)
 	p.extractDOCXMetadata(string(content), doc)
 
 	// Chunk the document
@@ -101,12 +101,16 @@ func (p *DOCXProcessor) ProcessDocument(reader io.Reader, filename string, confi
 	return doc, nil
 }
 
-// SupportedTypes returns supported document types
+// SupportedTypes returns supported document types.
+//
+// Only Office Open XML (.docx) is handled here. The legacy binary .doc format
+// (OLE Compound File) is intentionally not supported and would require a
+// separate parser; see DetectDocumentType in factory.go.
 func (p *DOCXProcessor) SupportedTypes() []DocumentType {
-	return []DocumentType{DocumentTypeDOCX, DocumentTypeDOC}
+	return []DocumentType{DocumentTypeDOCX}
 }
 
-// ExtractText extracts text from DOCX using github.com/fumiama/go-docx
+// ExtractText extracts text from DOCX using the underlying ZIP/XML structure
 func (p *DOCXProcessor) ExtractText(reader io.Reader) (string, error) {
 	content, err := io.ReadAll(reader)
 	if err != nil {
@@ -317,8 +321,8 @@ func (p *DOCXProcessor) extractDOCXTitle(content, filename string) string {
 
 // extractDOCXMetadata extracts DOCX-specific metadata
 func (p *DOCXProcessor) extractDOCXMetadata(content string, doc *Document) {
-	doc.Metadata["docx_processor"] = "fumiama/go-docx"
-	doc.Metadata["extraction_method"] = "library_based"
+	doc.Metadata["docx_processor"] = "stdlib-zip+xml"
+	doc.Metadata["extraction_method"] = "openxml"
 
 	// Try to extract additional DOCX metadata
 	contentBytes := []byte(content)
@@ -356,17 +360,14 @@ func (p *DOCXProcessor) extractDOCXMetadata(content string, doc *Document) {
 	}
 }
 
-// DOCX processing is now fully implemented using github.com/fumiama/go-docx
+// DOCX processing uses Go's standard library (archive/zip + encoding/xml) to
+// parse the Office Open XML container directly. It supports:
 //
-// Features:
-// - Text extraction from paragraphs and tables
-// - Core properties extraction (title, author, subject, etc.)
-// - Document statistics (paragraph count, table count)
-// - Metadata parsing from docProps/core.xml
-// - Integration with VittoriaDB chunking system
+//   - Text extraction from <w:t> runs and paragraph breaks (<w:p>)
+//   - Core properties extraction (title, author, subject, keywords, dates)
+//     via docProps/core.xml
+//   - Basic document statistics (paragraph count via newline counting)
+//   - Integration with VittoriaDB's chunking system
 //
-// For more advanced DOCX features, consider:
-// - Custom XML parts processing
-// - Style and formatting preservation
-// - Image and media extraction
-// - Complex table structure handling
+// For richer DOCX features (style preservation, images, complex tables) a
+// dedicated DOCX library would be required.

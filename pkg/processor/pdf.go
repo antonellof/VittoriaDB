@@ -32,7 +32,7 @@ func (p *PDFProcessor) ProcessDocument(reader io.Reader, filename string, config
 		return nil, fmt.Errorf("failed to read PDF document: %w", err)
 	}
 
-	// Extract text from PDF (placeholder implementation)
+	// Extract text from PDF (uses github.com/ledongthuc/pdf)
 	text, err := p.ExtractText(strings.NewReader(string(content)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract text from PDF: %w", err)
@@ -67,7 +67,6 @@ func (p *PDFProcessor) ProcessDocument(reader io.Reader, filename string, config
 	doc.Metadata["char_count"] = fmt.Sprintf("%d", len(text))
 	doc.Metadata["pdf_size"] = fmt.Sprintf("%d", len(content))
 
-	// Extract PDF-specific metadata (placeholder)
 	p.extractPDFMetadata(string(content), doc)
 
 	// Chunk the document

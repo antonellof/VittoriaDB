@@ -2,7 +2,9 @@ package core
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"math"
 	"runtime"
 	"sync"
 	"time"
@@ -390,12 +392,8 @@ func (io *IOOptimizer) asyncVectorRead(ctx context.Context, offsets []int64, dim
 
 		vectorData := result.Data[vectorOffset : vectorOffset+vectorSize]
 		vector := make([]float32, dimensions)
-
-		// Convert bytes to float32 slice
 		for j := 0; j < dimensions; j++ {
-			// Simple byte-to-float conversion (little-endian assumed)
-			bytes := vectorData[j*4 : (j+1)*4]
-			vector[j] = float32(bytes[0]) + float32(bytes[1])*256 + float32(bytes[2])*65536 + float32(bytes[3])*16777216
+			vector[j] = math.Float32frombits(binary.LittleEndian.Uint32(vectorData[j*4 : (j+1)*4]))
 		}
 
 		results[i] = vector
@@ -410,15 +408,10 @@ func (io *IOOptimizer) asyncVectorWrite(ctx context.Context, vectors [][]float32
 		offset := offsets[i]
 		pageID := uint32(offset / storage.PageSize)
 
-		// Create page with vector data
+		// Encode vector as IEEE-754 little-endian float32 bytes.
 		vectorData := make([]byte, len(vector)*4)
 		for j, v := range vector {
-			// Simple float-to-byte conversion (little-endian)
-			intVal := uint32(v)
-			vectorData[j*4] = byte(intVal)
-			vectorData[j*4+1] = byte(intVal >> 8)
-			vectorData[j*4+2] = byte(intVal >> 16)
-			vectorData[j*4+3] = byte(intVal >> 24)
+			binary.LittleEndian.PutUint32(vectorData[j*4:], math.Float32bits(v))
 		}
 
 		page := &storage.Page{
@@ -437,18 +430,17 @@ func (io *IOOptimizer) asyncVectorWrite(ctx context.Context, vectors [][]float32
 	return nil
 }
 
+// fallbackVectorRead is invoked when neither memory-mapped storage nor an async
+// I/O engine is configured. There is no synchronous storage path implemented at
+// this level (the regular Collection path handles synchronous I/O), so we
+// return an explicit error rather than silently producing zero vectors.
 func (io *IOOptimizer) fallbackVectorRead(offsets []int64, dimensions int) ([][]float32, error) {
-	// Placeholder for synchronous vector read
-	results := make([][]float32, len(offsets))
-	for i := range results {
-		results[i] = make([]float32, dimensions)
-	}
-	return results, nil
+	return nil, fmt.Errorf("io optimizer: synchronous vector read not configured")
 }
 
+// fallbackVectorWrite mirrors fallbackVectorRead.
 func (io *IOOptimizer) fallbackVectorWrite(vectors [][]float32, offsets []int64) error {
-	// Placeholder for synchronous vector write
-	return nil
+	return fmt.Errorf("io optimizer: synchronous vector write not configured")
 }
 
 func (io *IOOptimizer) fallbackBatchNormalize(vectors [][]float32) {
@@ -467,8 +459,11 @@ func (io *IOOptimizer) fallbackBatchNormalize(vectors [][]float32) {
 	}
 }
 
+// benchmarkIOOperations returns synthetic baseline numbers. A real I/O
+// benchmark would issue read/write batches against the configured storage
+// (mmap or async engine); that work is intentionally out of scope for this
+// helper, which is only used by the demo in examples/go/14_io_optimization_demo.go.
 func (io *IOOptimizer) benchmarkIOOperations(dimensions int, numVectors int) *IOBenchmarkResults {
-	// Placeholder for I/O benchmarking
 	return &IOBenchmarkResults{
 		ReadLatency:     1 * time.Millisecond,
 		WriteLatency:    2 * time.Millisecond,

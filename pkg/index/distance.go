@@ -127,43 +127,6 @@ func manhattanDistance(a, b []float32) float32 {
 	return sum
 }
 
-// SIMD optimized versions (placeholder for future implementation)
-// These would use assembly or CGO for actual SIMD instructions
-
-// dotProductAVX2 would be implemented in assembly for SIMD optimization
-func dotProductAVX2(a, b []float32) float32 {
-	// Placeholder - would be implemented in assembly
-	return dotProduct(a, b)
-}
-
-// cosineSimilarityAVX2 would be implemented in assembly for SIMD optimization
-func cosineSimilarityAVX2(a, b []float32) float32 {
-	// Placeholder - would be implemented in assembly
-	return cosineSimilarity(a, b)
-}
-
-// CPU feature detection and function selection
-var (
-	useSIMD bool = false // Would be set based on CPU features
-)
-
-func init() {
-	// CPU feature detection would go here
-	// For now, use standard implementations
-}
-
-// OptimizedDotProduct uses SIMD if available
-func OptimizedDotProduct(a, b []float32) float32 {
-	if useSIMD && len(a) >= 8 { // Minimum vector size for SIMD
-		return dotProductAVX2(a, b)
-	}
-	return dotProduct(a, b)
-}
-
-// OptimizedCosineSimilarity uses SIMD if available
-func OptimizedCosineSimilarity(a, b []float32) float32 {
-	if useSIMD && len(a) >= 8 {
-		return cosineSimilarityAVX2(a, b)
-	}
-	return cosineSimilarity(a, b)
-}
+// NOTE: True SIMD acceleration (AVX2/NEON) is not implemented yet.
+// For chunked, allocation-friendly implementations of these primitives,
+// see pkg/core/simd.go (SIMDVectorOps).

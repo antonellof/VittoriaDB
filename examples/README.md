@@ -267,38 +267,34 @@ python examples/python/09_performance_benchmarks.py
 - ✅ Detailed performance reports with statistics
 - ✅ Automatic collection cleanup after tests
 
-#### 10. Local Vectorizer Validation Test
-**File:** `10_local_vectorizer_validation_test.py`
+#### 11. All Vectorizers Comparison
+**File:** `11_all_vectorizers_comparison.py`
 
-**🧪 VALIDATION TEST:** Comprehensive testing of the pure Go local vectorizer implementation:
-- Local vectorizer functionality validation
-- Performance measurement and analysis
-- Semantic search quality testing
-- Zero-dependency verification
-- Comparison with other vectorizer approaches
+**🧪 STATUS MATRIX:** Probe every supported vectorizer (Ollama, auto-embeddings, Sentence
+Transformers, OpenAI, HuggingFace) and print a status matrix showing which ones are reachable in
+the current environment. The HuggingFace path now hits the real Inference API (added in v0.6.0).
 
 **Usage:**
 ```bash
-python examples/python/10_local_vectorizer_validation_test.py
+python examples/python/11_all_vectorizers_comparison.py
 ```
 
-**Features:**
-- ✅ Pure Go local vectorizer testing
-- ✅ Zero external dependencies validation
-- ✅ Performance benchmarking (microsecond-level timing)
-- ✅ Semantic search accuracy verification
-- ✅ Approach comparison analysis
-- ✅ Deterministic embedding validation
-- ✅ Offline capability confirmation
+#### 12. OpenAI API Testing
+**File:** `12_openai_api_testing.py`
 
-**Test Results:**
-```
-✅ Inserted 5 texts in 0.005s (0.001s per text)
-✅ Search time: 0.001s per query
-✅ Semantic similarity scores: 0.90+ for relevant matches
-✅ No Python subprocess calls
-✅ No external dependencies required
-```
+Smoke-tests the OpenAI vectorizer integration. Requires `OPENAI_API_KEY`.
+
+#### 13. Vectorization Comparison Test
+**File:** `13_vectorization_comparison_test.py`
+
+Side-by-side semantic-quality analysis across manual vectors, sentence-transformers, and OpenAI
+embeddings.
+
+#### 14. Simple Vectorization Test
+**File:** `14_simple_vectorization_test.py`
+
+Zero-dependency curl-based smoke test that exercises the HTTP API and the deterministic
+fallback vectorization path.
 
 ---
 
@@ -308,18 +304,18 @@ python examples/python/10_local_vectorizer_validation_test.py
 - **00-05**: Core embedding functionality (manual → client-side → server-side)
 - **06-07**: RAG (Retrieval-Augmented Generation) examples
 - **08-09**: Document processing and performance testing
-- **10**: Validation and testing utilities
+- **11-14**: Vectorizer comparison & smoke tests
 
 ### Recommended Learning Path
 1. **Start here**: `00_basic_usage_manual_vectors.py` - Learn the basics
 2. **Client-side**: `01_client_side_embeddings_basic.py` - Understand automatic embeddings
-3. **Server-side**: `02_server_side_embeddings_basic.py` - **🚀 NEW FEATURE!**
+3. **Server-side**: `02_server_side_embeddings_basic.py` - **🚀 Server-side auto-embeddings**
 4. **Advanced**: `03_server_side_embeddings_advanced.py` - Deep dive testing
 5. **Compare**: `04_embedding_methods_comparison.py` - See all approaches
 6. **Production**: `05_production_features_showcase.py` - Enterprise features
-7. **Validation**: `10_local_vectorizer_validation_test.py` - **🧪 Test local vectorizer**
-8. **Vectorization Testing**: `13_vectorization_comparison_test.py` - **🔬 Advanced analysis**
-9. **Simple Testing**: `14_simple_vectorization_test.py` - **🚀 No dependencies**
+7. **Vectorizer Status**: `11_all_vectorizers_comparison.py` - **🧪 Status matrix**
+8. **Quality Analysis**: `13_vectorization_comparison_test.py` - **🔬 Advanced analysis**
+9. **Smoke Test**: `14_simple_vectorization_test.py` - **🚀 Zero-dependency check**
 
 #### 13. Vectorization Comparison Test (NEW!)
 **File:** `13_vectorization_comparison_test.py`
@@ -648,8 +644,8 @@ go run 13_unified_configuration_demo.go
 #### 14. I/O Optimization Demo (NEW!)
 **File:** `14_io_optimization_demo.go`
 
-**⚡ PERFORMANCE OPTIMIZATION:** Advanced I/O optimization features including SIMD, memory-mapped storage, and async I/O:
-- SIMD-optimized vector operations with parallel processing
+**⚡ PERFORMANCE OPTIMIZATION:** Advanced I/O optimization features including chunked vectorized math, memory-mapped storage, and async I/O:
+- Chunked, allocation-friendly vector ops in pure Go (true CPU SIMD intrinsics planned)
 - Memory-mapped storage with zero-copy operations
 - Async I/O engine with worker pools and batching
 - Comprehensive performance benchmarks across different scenarios
@@ -662,7 +658,7 @@ go run 14_io_optimization_demo.go
 ```
 
 **Features:**
-- ✅ **SIMD operations** - Up to 7.7x speedup with parallel SIMD for large datasets
+- ✅ **Chunked vector ops** - Up to 7.7x speedup for batched math on large datasets
 - ✅ **Memory-mapped I/O** - Zero-copy reads, 10-50x faster than traditional I/O
 - ✅ **Async I/O engine** - Non-blocking operations with worker pools
 - ✅ **Vectorized operations** - Better CPU cache utilization and performance
@@ -670,8 +666,8 @@ go run 14_io_optimization_demo.go
 - ✅ **System integration** - Works seamlessly with unified configuration system
 
 **📊 Performance Results:**
-- **SIMD vectorized operations**: 1.03-2.02x speedup for individual operations
-- **Parallel SIMD processing**: 2.4-7.7x speedup for large datasets (10K+ vectors)
+- **Vectorized math**: 1.03-2.02x speedup for individual operations
+- **Parallel batched ops**: 2.4-7.7x speedup for large datasets (10K+ vectors)
 - **Memory-mapped storage**: Zero-copy reads with microsecond-level latency
 - **Async I/O throughput**: Improved concurrent operation handling
 - **System scalability**: Optimal performance across different CPU core counts
@@ -865,13 +861,11 @@ The `documents/` directory contains sample documents for testing:
 ### Document Types Supported
 | Format | Extension | Status | Features |
 |--------|-----------|---------|----------|
-| **Plain Text** | `.txt` | ✅ Fully Supported | Direct text processing |
-| **Markdown** | `.md` | ✅ Fully Supported | Frontmatter parsing |
-| **HTML** | `.html` | ✅ Fully Supported | Tag stripping, metadata |
-| **PDF** | `.pdf` | ✅ Fully Supported | Multi-page text extraction |
-| **DOCX** | `.docx` | ✅ Fully Supported | Properties, text extraction |
-| **DOC** | `.doc` | 🚧 Placeholder | Legacy format support |
-| **RTF** | `.rtf` | ❌ Not Implemented | Rich text format |
+| **Plain Text** | `.txt`, `.text` | ✅ Fully Supported | Direct text processing |
+| **Markdown** | `.md`, `.markdown` | ✅ Fully Supported | Frontmatter parsing |
+| **HTML** | `.html`, `.htm` | ✅ Fully Supported | Tag stripping, metadata |
+| **PDF** | `.pdf` | ✅ Fully Supported | Multi-page text extraction (`github.com/ledongthuc/pdf`) |
+| **DOCX** | `.docx` | ✅ Fully Supported | Office Open XML parsing (stdlib zip + xml) |
 
 ## 🚀 Quick Start
 
@@ -882,8 +876,8 @@ The `documents/` directory contains sample documents for testing:
 
 2. **Choose an example:**
    - **Start learning**: `python examples/python/00_basic_usage_manual_vectors.py`
-   - **Server-side embeddings**: `python examples/python/02_server_side_embeddings_basic.py` **🚀 NEW!**
-   - **Test local vectorizer**: `python examples/python/10_local_vectorizer_validation_test.py` **🧪 VALIDATE!**
+   - **Server-side embeddings**: `python examples/python/02_server_side_embeddings_basic.py`
+   - **Vectorizer status matrix**: `python examples/python/11_all_vectorizers_comparison.py`
    - **RAG applications**: `python examples/python/07_rag_complete_workflow.py`
    - **Document processing**: `python examples/python/08_document_processing_workflow.py`
    - **Performance testing**: `python examples/python/09_performance_benchmarks.py`

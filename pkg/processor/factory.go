@@ -57,16 +57,12 @@ func (f *ProcessorFactory) DetectDocumentType(filename string) DocumentType {
 		return DocumentTypePDF
 	case ".docx":
 		return DocumentTypeDOCX
-	case ".doc":
-		return DocumentTypeDOC
 	case ".txt", ".text":
 		return DocumentTypeTXT
 	case ".md", ".markdown":
 		return DocumentTypeMD
 	case ".html", ".htm":
 		return DocumentTypeHTML
-	case ".rtf":
-		return DocumentTypeRTF
 	default:
 		// Default to text for unknown extensions
 		return DocumentTypeTXT
@@ -98,15 +94,13 @@ func (f *ProcessorFactory) IsSupportedFile(filename string) bool {
 func (f *ProcessorFactory) GetSupportedExtensions() []string {
 	return []string{
 		".pdf",      // PDF documents
-		".docx",     // Word documents (modern)
-		".doc",      // Word documents (legacy)
+		".docx",     // Word documents (Office Open XML)
 		".txt",      // Plain text
 		".text",     // Plain text (alternative)
 		".md",       // Markdown
 		".markdown", // Markdown (alternative)
 		".html",     // HTML documents
 		".htm",      // HTML documents (alternative)
-		".rtf",      // Rich Text Format (placeholder)
 	}
 }
 
@@ -148,20 +142,8 @@ func (f *ProcessorFactory) GetProcessorInfo() []ProcessorInfo {
 		{
 			Type:        DocumentTypeDOCX,
 			Extensions:  []string{".docx"},
-			Description: "Microsoft Word documents with metadata extraction using github.com/fumiama/go-docx",
+			Description: "Microsoft Word (.docx) documents parsed via the Office Open XML container (stdlib zip + xml)",
 			Status:      "fully_implemented",
-		},
-		{
-			Type:        DocumentTypeDOC,
-			Extensions:  []string{".doc"},
-			Description: "Legacy Microsoft Word documents (requires additional library integration)",
-			Status:      "placeholder",
-		},
-		{
-			Type:        DocumentTypeRTF,
-			Extensions:  []string{".rtf"},
-			Description: "Rich Text Format documents (not yet implemented)",
-			Status:      "not_implemented",
 		},
 	}
 
